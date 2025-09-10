@@ -15,7 +15,7 @@
 
 1. **Download the indexer**
    ```bash
-   wget https://github.com/user/repo/raw/main/index.php
+   wget https://github.com/5q12-ccls/5q12-s-Indexer/raw/main/index.php
    # or download manually from GitHub
    ```
 
@@ -444,5 +444,6 @@ location ~* \.(png|css|js)$ {
 ```
 
 ---
+
 
 **Next Steps:** After installation, see the [Configuration Guide](configuration.md) to customize your indexer settings.
