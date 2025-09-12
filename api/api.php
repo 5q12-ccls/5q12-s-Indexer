@@ -112,6 +112,9 @@ switch ($action) {
         handleDefaultRequest();
         break;
 }
+/**
+ * Handle version check requests
+ */
 function handleVersionCheckRequest() {
     global $configFile;
     $currentVersion = $_GET['current_version'] ?? '';
@@ -346,7 +349,7 @@ function handleDefaultRequest() {
         'success' => true,
         'service' => 'Indexer API',
         'version' => '1.0',
-        'description' => 'API for 5q12s indexer project',
+        'description' => 'API for the custom indexer project',
         'endpoints' => [
             'versionCheck' => [
                 'url' => '?action=versionCheck&current_version={version}',
