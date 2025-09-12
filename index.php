@@ -262,9 +262,6 @@ function checkAndUpdateConfig() {
         return false;
     }
 }
-/**
- * Merge new config settings with existing config
- */
 function mergeConfigUpdates($localConfig, $latestConfig) {
     global $configFile;
     try {
@@ -317,9 +314,6 @@ function mergeConfigUpdates($localConfig, $latestConfig) {
         return false;
     }
 }
-/**
- * Log config update activity
- */
 function logConfigUpdate($oldVersion, $newVersion, $changes) {
     $logData = [
         'timestamp' => date('Y-m-d H:i:s'),
