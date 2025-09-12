@@ -262,6 +262,9 @@ function checkAndUpdateConfig() {
         return false;
     }
 }
+/**
+ * Merge new config settings with existing config
+ */
 function mergeConfigUpdates($localConfig, $latestConfig) {
     global $configFile;
     try {
@@ -314,6 +317,9 @@ function mergeConfigUpdates($localConfig, $latestConfig) {
         return false;
     }
 }
+/**
+ * Log config update activity
+ */
 function logConfigUpdate($oldVersion, $newVersion, $changes) {
     $logData = [
         'timestamp' => date('Y-m-d H:i:s'),
@@ -1162,6 +1168,27 @@ if (isset($_GET['view']) && $_GET['view'] === 'raw' && isset($_GET['file'])) {
                 case 'jfif':
                     header('Content-Type: image/jpeg');
                     break;
+                case 'avif':
+                    header('Content-Type: image/avif');
+                    break;
+                case 'ico':
+                    header('Content-Type: image/vnd.microsoft.icon');
+                    break;
+                case 'cur':
+                    header('Content-Type: image/vnd.microsoft.icon');
+                    break;
+                case 'tiff':
+                    header('Content-Type: image/tiff');
+                    break;
+                case 'bmp':
+                    header('Content-Type: image/bmp');
+                    break;
+                case 'heic':
+                    header('Content-Type: image/heic');
+                    break;
+                case 'svg':
+                    header('Content-Type: image/svg+xml');
+                    break;
                 case 'mp4':
                     header('Content-Type: video/mp4');
                     break;
@@ -1170,6 +1197,42 @@ if (isset($_GET['view']) && $_GET['view'] === 'raw' && isset($_GET['file'])) {
                     break;
                 case 'mp3':
                     header('Content-Type: audio/mpeg');
+                    break;
+                case 'aac':
+                    header('Content-Type: audio/aac');
+                    break;
+                case 'flac':
+                    header('Content-Type: audio/flac');
+                    break;
+                case 'm4a':
+                    header('Content-Type: audio/mp4');
+                    break;
+                case 'ogg':
+                    header('Content-Type: audio/ogg');
+                    break;
+                case 'opus':
+                    header('Content-Type: audio/ogg');
+                    break;
+                case 'wma':
+                    header('Content-Type: audio/x-ms-wma');
+                    break;
+                case 'mov':
+                    header('Content-Type: video/quicktime');
+                    break;
+                case 'webm':
+                    header('Content-Type: video/webm');
+                    break;
+                case 'wmv':
+                    header('Content-Type: video/x-ms-wmv');
+                    break;
+                case '3gp':
+                    header('Content-Type: video/3gpp');
+                    break;
+                case 'flv':
+                    header('Content-Type: video/x-flv');
+                    break;
+                case 'm4v':
+                    header('Content-Type: video/mp4');
                     break;
                 case 'docx':
                     header('Content-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document');
