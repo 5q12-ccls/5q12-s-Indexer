@@ -24,6 +24,7 @@ $localStyleDir = $localApiDir . '/style';
 $configFile = $indexerFilesDir . '/config.json';
 $localExtensionMapFile = $localApiDir . '/extensionMap.json';
 $localIconsFile = $localApiDir . '/icons.json';
+$localConfigReferenceFile = $indexerFilesDir . '/config-reference.txt';
 initializeDirectories();
 $config = loadConfiguration();
 if (!isset($config['main']['disable_api']) || !$config['main']['disable_api']) {
@@ -37,11 +38,22 @@ $disableApi = isset($config['main']['disable_api']) ? $config['main']['disable_a
 $cacheType = isset($config['main']['cache_type']) ? $config['main']['cache_type'] : 'sqlite';
 $disableFileDownloads = isset($config['main']['disable_file_downloads']) ? $config['main']['disable_file_downloads'] : false;
 $disableFolderDownloads = isset($config['main']['disable_folder_downloads']) ? $config['main']['disable_folder_downloads'] : false;
+$iconType = isset($config['main']['icon_type']) ? $config['main']['icon_type'] : 'default';
 $denyList = parseDenyAllowList(isset($config['main']['deny_list']) ? $config['main']['deny_list'] : '');
 $allowList = parseDenyAllowList(isset($config['main']['allow_list']) ? $config['main']['allow_list'] : '');
 $conflictingRules = findConflictingRules($denyList, $allowList);
 if ($disableApi) {
     ensureLocalResources();
+}
+if (!$disableApi && !file_exists($localConfigReferenceFile)) {
+    $referenceUrl = $apiBaseUrl . '/api.php?action=configReference';
+    $referenceResponse = @file_get_contents($referenceUrl);
+    if ($referenceResponse !== false) {
+        $referenceData = json_decode($referenceResponse, true);
+        if ($referenceData !== null && isset($referenceData['content'])) {
+            file_put_contents($localConfigReferenceFile, $referenceData['content']);
+        }
+    }
 }
 $cacheInstance = initializeCache();
 runCacheCleanup();
@@ -201,7 +213,7 @@ function checkAndUpdateConfig() {
     if ($disableApi) {
         return false;
     }
-    $localVersion = isset($config['version']) ? $config['version'] : '1.0';
+    $localVersion = isset($config['version']) ? $config['version'] : '1.1.10';
     try {
         $cacheKey = 'version_check_' . $localVersion;
         if ($cacheInstance !== null) {
@@ -241,7 +253,7 @@ function checkAndUpdateConfig() {
             return false;
         }
         $latestConfig = $latestConfigData['config'];
-        $latestVersion = isset($latestConfig['version']) ? $latestConfig['version'] : '1.0';
+        $latestVersion = isset($latestConfig['version']) ? $latestConfig['version'] : '1.1.10';
         if ($localVersion === $latestVersion) {
             if ($cacheInstance !== null) {
                 $cacheInstance->set($cacheKey, 'version', false, 3600);
@@ -256,6 +268,20 @@ function checkAndUpdateConfig() {
             logConfigUpdate($localVersion, $latestVersion, $updateResult['changes']);
             return true;
         }
+        $referenceUrl = $apiBaseUrl . '/api.php?action=configReference';
+        $referenceResponse = @file_get_contents($referenceUrl);
+        if ($referenceResponse !== false) {
+            $referenceData = json_decode($referenceResponse, true);
+            if ($referenceData !== null && isset($referenceData['content'])) {
+                $currentReferenceContent = '';
+                if (file_exists($localConfigReferenceFile)) {
+                    $currentReferenceContent = file_get_contents($localConfigReferenceFile);
+                }
+                if ($currentReferenceContent !== $referenceData['content']) {
+                    file_put_contents($localConfigReferenceFile, $referenceData['content']);
+                }
+            }
+        }
         return false;
     } catch (Exception $e) {
         error_log("Config update error: " . $e->getMessage());
@@ -268,8 +294,8 @@ function mergeConfigUpdates($localConfig, $latestConfig) {
         $changes = [];
         $updated = false;
         $mergedConfig = $localConfig;
-        $oldVersion = isset($localConfig['version']) ? $localConfig['version'] : '1.0';
-        $newVersion = isset($latestConfig['version']) ? $latestConfig['version'] : '1.0';
+        $oldVersion = isset($localConfig['version']) ? $localConfig['version'] : '1.1.10';
+        $newVersion = isset($latestConfig['version']) ? $latestConfig['version'] : '1.1.10';
         $mergedConfig['version'] = $newVersion;
         $changes[] = "Updated version from {$oldVersion} to {$newVersion}";
         $updated = true;
@@ -327,7 +353,7 @@ function logConfigUpdate($oldVersion, $newVersion, $changes) {
     @file_put_contents($logFile, $logEntry, FILE_APPEND | LOCK_EX);
 }
 function ensureLocalResources() {
-    global $apiBaseUrl, $localApiDir, $localStyleDir, $localExtensionMapFile, $localIconsFile, $iconsDir;
+    global $apiBaseUrl, $localApiDir, $localStyleDir, $localExtensionMapFile, $localIconsFile, $iconsDir, $iconType;
     if (!is_dir($localApiDir)) {
         mkdir($localApiDir, 0755, true);
     }
@@ -342,6 +368,16 @@ function ensureLocalResources() {
         $extensionMapData = @file_get_contents($extensionMapUrl);
         if ($extensionMapData !== false) {
             file_put_contents($localExtensionMapFile, $extensionMapData);
+        }
+    }
+    if (!file_exists($localConfigReferenceFile)) {
+        $referenceUrl = $apiBaseUrl . '/api.php?action=configReference';
+        $referenceResponse = @file_get_contents($referenceUrl);
+        if ($referenceResponse !== false) {
+            $referenceData = json_decode($referenceResponse, true);
+            if ($referenceData !== null && isset($referenceData['content'])) {
+                file_put_contents($localConfigReferenceFile, $referenceData['content']);
+            }
         }
     }
     if (!file_exists($localIconsFile)) {
@@ -364,9 +400,22 @@ function ensureLocalResources() {
             }
         }
     }
-    $stylesheetPath = $localStyleDir . '/8d9f7fa8de5d3bac302028ab474b30b4.css';
+    if ($iconType === 'minimal' || $iconType === 'default') {
+        $requiredIcons = ['folder.png', 'non-descript-default-file.png'];
+        foreach ($requiredIcons as $iconFile) {
+            $localIconPath = $iconsDir . '/' . $iconFile;
+            if (!file_exists($localIconPath)) {
+                $iconUrl = $apiBaseUrl . '/icons/' . $iconFile;
+                $iconData = @file_get_contents($iconUrl);
+                if ($iconData !== false) {
+                    file_put_contents($localIconPath, $iconData);
+                }
+            }
+        }
+    }
+    $stylesheetPath = $localStyleDir . '/35bca3b572d3d428ce795d6f5b1aacce.css';
     if (!file_exists($stylesheetPath)) {
-        $stylesheetUrl = $apiBaseUrl . '/style/8d9f7fa8de5d3bac302028ab474b30b4.css';
+        $stylesheetUrl = $apiBaseUrl . '/style/35bca3b572d3d428ce795d6f5b1aacce.css';
         $stylesheetData = @file_get_contents($stylesheetUrl);
         if ($stylesheetData !== false) {
             file_put_contents($stylesheetPath, $stylesheetData);
@@ -465,7 +514,34 @@ function loadLocalIconMappings() {
     return $mappings ?: [];
 }
 function getIconPath($type, $extension = '') {
-    global $webPath, $iconsDir, $localIcons, $disableApi, $localStyleDir;
+    global $webPath, $iconsDir, $localIcons, $disableApi, $localStyleDir, $iconType;
+    if ($iconType === 'disabled') {
+        return null;
+    }
+    if ($iconType === 'emoji') {
+        return null;
+    }
+    if ($iconType === 'minimal') {
+        $iconFilename = ($type === 'folder') ? 'folder.png' : 'non-descript-default-file.png';
+        if ($disableApi) {
+            $iconPath = $iconsDir . '/' . $iconFilename;
+            if (file_exists($iconPath)) {
+                $relativePath = str_replace($GLOBALS['scriptDir'], '', $iconPath);
+                return $webPath . $relativePath;
+            }
+        } else {
+            if ($localIcons) {
+                $iconPath = $iconsDir . '/' . $iconFilename;
+                if (file_exists($iconPath)) {
+                    $relativePath = str_replace($GLOBALS['scriptDir'], '', $iconPath);
+                    return $webPath . $relativePath;
+                }
+            }
+            global $apiBaseUrl;
+            return $apiBaseUrl . '/icons/' . $iconFilename;
+        }
+        return null;
+    }
     if ($disableApi) {
         $iconInfo = getIconFromLocal($type, $extension);
         if ($iconInfo !== null) {
@@ -515,10 +591,10 @@ function getIconFromLocal($type, $extension = '') {
 function getStylesheetUrl() {
     global $webPath, $disableApi, $localStyleDir, $apiBaseUrl, $scriptDir;
     if ($disableApi) {
-        $relativePath = str_replace($scriptDir, '', $localStyleDir . '/8d9f7fa8de5d3bac302028ab474b30b4.css');
+        $relativePath = str_replace($scriptDir, '', $localStyleDir . '/35bca3b572d3d428ce795d6f5b1aacce.css');
         return $webPath . $relativePath;
     } else {
-        return $apiBaseUrl . '/style/8d9f7fa8de5d3bac302028ab474b30b4.css';
+        return $apiBaseUrl . '/style/35bca3b572d3d428ce795d6f5b1aacce.css';
     }
 }
 function shouldIndexFile($filename, $extension) {
@@ -1162,6 +1238,27 @@ if (isset($_GET['view']) && $_GET['view'] === 'raw' && isset($_GET['file'])) {
                 case 'jfif':
                     header('Content-Type: image/jpeg');
                     break;
+                case 'avif':
+                    header('Content-Type: image/avif');
+                    break;
+                case 'ico':
+                    header('Content-Type: image/vnd.microsoft.icon');
+                    break;
+                case 'cur':
+                    header('Content-Type: image/vnd.microsoft.icon');
+                    break;
+                case 'tiff':
+                    header('Content-Type: image/tiff');
+                    break;
+                case 'bmp':
+                    header('Content-Type: image/bmp');
+                    break;
+                case 'heic':
+                    header('Content-Type: image/heic');
+                    break;
+                case 'svg':
+                    header('Content-Type: image/svg+xml');
+                    break;
                 case 'mp4':
                     header('Content-Type: video/mp4');
                     break;
@@ -1170,6 +1267,42 @@ if (isset($_GET['view']) && $_GET['view'] === 'raw' && isset($_GET['file'])) {
                     break;
                 case 'mp3':
                     header('Content-Type: audio/mpeg');
+                    break;
+                case 'aac':
+                    header('Content-Type: audio/aac');
+                    break;
+                case 'flac':
+                    header('Content-Type: audio/flac');
+                    break;
+                case 'm4a':
+                    header('Content-Type: audio/mp4');
+                    break;
+                case 'ogg':
+                    header('Content-Type: audio/ogg');
+                    break;
+                case 'opus':
+                    header('Content-Type: audio/ogg');
+                    break;
+                case 'wma':
+                    header('Content-Type: audio/x-ms-wma');
+                    break;
+                case 'mov':
+                    header('Content-Type: video/quicktime');
+                    break;
+                case 'webm':
+                    header('Content-Type: video/webm');
+                    break;
+                case 'wmv':
+                    header('Content-Type: video/x-ms-wmv');
+                    break;
+                case '3gp':
+                    header('Content-Type: video/3gpp');
+                    break;
+                case 'flv':
+                    header('Content-Type: video/x-flv');
+                    break;
+                case 'm4v':
+                    header('Content-Type: video/mp4');
                     break;
                 case 'docx':
                     header('Content-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document');
@@ -1219,6 +1352,7 @@ function getBreadcrumbs($currentPath) {
     <link rel="stylesheet" href="<?php echo getStylesheetUrl(); ?>">
 </head>
 <body>
+    <body<?php if ($iconType === 'disabled') echo ' class="icon-disabled"'; ?>>
     <div class="container">
         <div class="header">
             <h1>Index of <?php echo htmlspecialchars($webCurrentPath); ?></h1>
@@ -1300,10 +1434,11 @@ function getBreadcrumbs($currentPath) {
                     <div class="file-icon">
                         <?php 
                         $folderIconPath = getIconPath('folder');
-                        if ($folderIconPath): ?>
-                            <img src="<?php echo htmlspecialchars($folderIconPath); ?>" alt="Folder">
-                        <?php else: ?>
+                        if ($iconType === 'disabled'): ?>
+                        <?php elseif ($iconType === 'emoji' || $folderIconPath === null): ?>
                             <div class="file-icon-emoji">📁</div>
+                        <?php else: ?>
+                            <img src="<?php echo htmlspecialchars($folderIconPath); ?>" alt="Folder">
                         <?php endif; ?>
                     </div>
                     <div class="file-name">
@@ -1323,10 +1458,11 @@ function getBreadcrumbs($currentPath) {
                     <div class="file-icon">
                         <?php 
                         $folderIconPath = getIconPath('folder');
-                        if ($folderIconPath): ?>
-                            <img src="<?php echo htmlspecialchars($folderIconPath); ?>" alt="Folder">
-                        <?php else: ?>
+                        if ($iconType === 'disabled'): ?>
+                        <?php elseif ($iconType === 'emoji' || $folderIconPath === null): ?>
                             <div class="file-icon-emoji">📁</div>
+                        <?php else: ?>
+                            <img src="<?php echo htmlspecialchars($folderIconPath); ?>" alt="Folder">
                         <?php endif; ?>
                     </div>
                     <div class="file-name">
@@ -1352,10 +1488,11 @@ function getBreadcrumbs($currentPath) {
                     <div class="file-icon">
                         <?php 
                         $fileIconPath = getIconPath('file', $file['extension']);
-                        if ($fileIconPath): ?>
-                            <img src="<?php echo htmlspecialchars($fileIconPath); ?>" alt="File">
-                        <?php else: ?>
+                        if ($iconType === 'disabled'): ?>
+                        <?php elseif ($iconType === 'emoji' || $fileIconPath === null): ?>
                             <div class="file-icon-emoji">📄</div>
+                        <?php else: ?>
+                            <img src="<?php echo htmlspecialchars($fileIconPath); ?>" alt="File">
                         <?php endif; ?>
                     </div>
                     <div class="file-name">

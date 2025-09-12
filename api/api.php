@@ -105,6 +105,9 @@ switch ($action) {
     case 'getExtensionSetting':
         handleGetExtensionSettingRequest();
         break;
+    case 'configReference':
+        handleConfigReferenceRequest();
+        break;
     case 'status':
         handleStatusRequest();
         break;
@@ -112,9 +115,6 @@ switch ($action) {
         handleDefaultRequest();
         break;
 }
-/**
- * Handle version check requests
- */
 function handleVersionCheckRequest() {
     global $configFile;
     $currentVersion = $_GET['current_version'] ?? '';
@@ -129,7 +129,7 @@ function handleVersionCheckRequest() {
     if ($config === null) {
         errorResponse('Invalid configuration file', 500);
     }
-    $latestVersion = isset($config['version']) ? $config['version'] : '1.0';
+    $latestVersion = isset($config['version']) ? $config['version'] : '1.1.10';
     $updateNeeded = version_compare($currentVersion, $latestVersion, '<');
     $response = [
         'success' => true,
@@ -251,7 +251,7 @@ function handleConfigRequest() {
     jsonResponse([
         'success' => true,
         'config' => $config,
-        'version' => '1.0',
+        'version' => '1.1.10',
         'last_modified' => filemtime($configFile)
     ]);
 }
@@ -312,7 +312,7 @@ function handleStatusRequest() {
     $status = [
         'success' => true,
         'service' => 'Indexer API',
-        'version' => '1.0',
+        'version' => '1.1.10',
         'timestamp' => date('Y-m-d H:i:s'),
         'config_exists' => file_exists($configFile),
         'icons_dir_exists' => is_dir($iconsDir),
@@ -344,11 +344,28 @@ function handleStatusRequest() {
     logRequest('status');
     jsonResponse($status);
 }
+function handleConfigReferenceRequest() {
+    $referenceFile = __DIR__ . '/config-reference.txt';
+    if (!file_exists($referenceFile)) {
+        errorResponse('Configuration reference not found', 404);
+    }
+    $content = file_get_contents($referenceFile);
+    $lastModified = filemtime($referenceFile);
+    logRequest('configReference');
+    header('Cache-Control: public, max-age=86400');
+    jsonResponse([
+        'success' => true,
+        'content' => $content,
+        'last_modified' => $lastModified,
+        'version' => '1.2',
+        'format' => 'text'
+    ]);
+}
 function handleDefaultRequest() {
     $info = [
         'success' => true,
         'service' => 'Indexer API',
-        'version' => '1.0',
+        'version' => '1.1.10',
         'description' => 'API for the custom indexer project',
         'endpoints' => [
             'versionCheck' => [
@@ -389,6 +406,11 @@ function handleDefaultRequest() {
             'getExtensionSetting' => [
                 'url' => '?action=getExtensionSetting&extension={ext}&type={indexing|viewing}',
                 'description' => 'Get the configuration setting for a specific file extension',
+                'method' => 'GET'
+            ],
+            'configReference' => [
+                'url' => '?action=configReference',
+                'description' => 'Get configuration reference documentation',
                 'method' => 'GET'
             ],
             'status' => [
