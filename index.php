@@ -43,7 +43,11 @@ $denyList = parseDenyAllowList(isset($config['main']['deny_list']) ? $config['ma
 $allowList = parseDenyAllowList(isset($config['main']['allow_list']) ? $config['main']['allow_list'] : '');
 $conflictingRules = findConflictingRules($denyList, $allowList);
 if ($disableApi) {
-    ensureLocalResources();
+    try {
+        ensureLocalResources();
+    } catch (Exception $e) {
+        error_log("Error ensuring local resources: " . $e->getMessage());
+    }
 }
 if (!$disableApi && !file_exists($localConfigReferenceFile)) {
     $referenceUrl = $apiBaseUrl . '/api.php?action=configReference';
@@ -353,7 +357,8 @@ function logConfigUpdate($oldVersion, $newVersion, $changes) {
     @file_put_contents($logFile, $logEntry, FILE_APPEND | LOCK_EX);
 }
 function ensureLocalResources() {
-    global $apiBaseUrl, $localApiDir, $localStyleDir, $localExtensionMapFile, $localIconsFile, $iconsDir, $iconType;
+    global $apiBaseUrl, $localApiDir, $localStyleDir, $localExtensionMapFile, $localIconsFile, $iconsDir, $iconType, $localConfigReferenceFile;
+    
     if (!is_dir($localApiDir)) {
         mkdir($localApiDir, 0755, true);
     }
@@ -363,6 +368,7 @@ function ensureLocalResources() {
     if (!is_dir($iconsDir)) {
         mkdir($iconsDir, 0755, true);
     }
+
     if (!file_exists($localExtensionMapFile)) {
         $extensionMapUrl = $apiBaseUrl . '/extensionMap.json';
         $extensionMapData = @file_get_contents($extensionMapUrl);
@@ -370,6 +376,7 @@ function ensureLocalResources() {
             file_put_contents($localExtensionMapFile, $extensionMapData);
         }
     }
+
     if (!file_exists($localConfigReferenceFile)) {
         $referenceUrl = $apiBaseUrl . '/api.php?action=configReference';
         $referenceResponse = @file_get_contents($referenceUrl);
@@ -380,26 +387,29 @@ function ensureLocalResources() {
             }
         }
     }
+
     if (!file_exists($localIconsFile)) {
         $iconsJsonUrl = $apiBaseUrl . '/icons.json';
         $iconsJsonData = @file_get_contents($iconsJsonUrl);
         if ($iconsJsonData !== false) {
             file_put_contents($localIconsFile, $iconsJsonData);
+            
             $iconsData = json_decode($iconsJsonData, true);
-            if ($iconsData) {
+            if ($iconsData && is_array($iconsData)) {
                 foreach ($iconsData as $extension => $iconFile) {
                     $localIconPath = $iconsDir . '/' . $iconFile;
                     if (!file_exists($localIconPath)) {
                         $iconUrl = $apiBaseUrl . '/icons/' . $iconFile;
                         $iconData = @file_get_contents($iconUrl);
                         if ($iconData !== false) {
-                            file_put_contents($localIconPath, $iconData);
+                            @file_put_contents($localIconPath, $iconData);
                         }
                     }
                 }
             }
         }
     }
+
     if ($iconType === 'minimal' || $iconType === 'default') {
         $requiredIcons = ['folder.png', 'non-descript-default-file.png'];
         foreach ($requiredIcons as $iconFile) {
@@ -408,17 +418,19 @@ function ensureLocalResources() {
                 $iconUrl = $apiBaseUrl . '/icons/' . $iconFile;
                 $iconData = @file_get_contents($iconUrl);
                 if ($iconData !== false) {
-                    file_put_contents($localIconPath, $iconData);
+                    @file_put_contents($localIconPath, $iconData);
                 }
             }
         }
     }
+
     $stylesheetPath = $localStyleDir . '/35bca3b572d3d428ce795d6f5b1aacce.css';
     if (!file_exists($stylesheetPath)) {
         $stylesheetUrl = $apiBaseUrl . '/style/35bca3b572d3d428ce795d6f5b1aacce.css';
         $stylesheetData = @file_get_contents($stylesheetUrl);
         if ($stylesheetData !== false) {
-            file_put_contents($stylesheetPath, $stylesheetData);
+            @file_put_contents($stylesheetPath, $stylesheetData);
+            
             $fontFiles = [
                 'cyrillic-ext-400.woff2', 'cyrillic-400.woff2', 'greek-400.woff2',
                 'vietnamese-400.woff2', 'latin-ext-400.woff2', 'latin-400.woff2',
@@ -433,7 +445,7 @@ function ensureLocalResources() {
                     $fontUrl = $apiBaseUrl . '/style/' . $fontFile;
                     $fontData = @file_get_contents($fontUrl);
                     if ($fontData !== false) {
-                        file_put_contents($localFontPath, $fontData);
+                        @file_put_contents($localFontPath, $fontData);
                     }
                 }
             }
@@ -566,21 +578,31 @@ function getIconPath($type, $extension = '') {
 }
 function getIconFromLocal($type, $extension = '') {
     global $iconsDir;
+    
     $iconMappings = loadLocalIconMappings();
+    
     if ($type === 'folder') {
         $iconFile = isset($iconMappings['folder']) ? $iconMappings['folder'] : 'folder.png';
     } else {
         $extension = strtolower($extension);
-        $iconFile = isset($iconMappings[$extension]) ? $iconMappings[$extension] : 'text.png';
+        $iconFile = isset($iconMappings[$extension]) ? $iconMappings[$extension] : 'non-descript-default-file.png';
     }
+    
     $iconPath = $iconsDir . '/' . $iconFile;
+    
     if (!file_exists($iconPath)) {
-        $iconFile = 'text.png';
+        if ($type === 'folder') {
+            $iconFile = 'folder.png';
+        } else {
+            $iconFile = 'non-descript-default-file.png';
+        }
         $iconPath = $iconsDir . '/' . $iconFile;
+        
         if (!file_exists($iconPath)) {
             return null;
         }
     }
+    
     return [
         'filename' => $iconFile,
         'path' => $iconPath,
