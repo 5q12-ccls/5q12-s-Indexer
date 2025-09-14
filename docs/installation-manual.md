@@ -119,7 +119,7 @@ php -m | grep -E "(sqlite|zip|json|curl)"
 
 ```bash
 # Clone repository
-git clone https://github.com/user/repo.git
+git clone https://github.com/5q12-ccls/5q12-s-Indexer.git
 cd repo
 
 # Copy to web directory
@@ -459,5 +459,6 @@ location ~ /\.indexer_files {
 - Regular security updates
 
 ---
+
 
 **Next Steps:** After installation, see the [Configuration Guide](configuration.md) to customize your indexer settings.
