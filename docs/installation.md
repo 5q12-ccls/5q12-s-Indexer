@@ -4,10 +4,23 @@
 
 ## Installation Methods
 
-### 1. Automated Script Installation (Recommended)
-**Best for:** Most users, production deployments, quick setup
+### 1. Docker Installation (Recommended)
+**Best for:** Most users, production deployments, quick setup, isolated environments
 
-The easiest way to install 5q12's Indexer with automatic dependency management and configuration.
+The easiest way to install 5q12's Indexer with complete environment isolation and automatic dependency management.
+
+- ✅ Complete environment isolation
+- ✅ Automatic dependency management
+- ✅ Cross-platform compatibility
+- ✅ Easy updates and rollbacks
+- ✅ No host system modifications
+
+**[→ Docker Installation Guide](installation-docker.md)**
+
+### 2. Automated Script Installation
+**Best for:** Debian/Ubuntu servers, system administrators, production servers
+
+Automatic installation with dependency management and system integration for Debian-based systems.
 
 - ✅ Automatic dependency installation
 - ✅ Nginx configuration
@@ -17,7 +30,7 @@ The easiest way to install 5q12's Indexer with automatic dependency management a
 
 **[→ Script Installation Guide](installation-script.md)**
 
-### 2. Manual Installation
+### 3. Manual Installation
 **Best for:** Advanced users, custom environments, learning the system
 
 Step-by-step manual installation with full control over the process.
@@ -29,34 +42,26 @@ Step-by-step manual installation with full control over the process.
 
 **[→ Manual Installation Guide](installation-manual.md)**
 
-### 3. Docker Installation
-**Best for:** Containerized environments, development, isolation
-
-Run 5q12's Indexer in a containerized environment with Docker.
-
-- 🚧 **Coming Soon / Currently Being Worked On**
-- Will support Docker Compose
-- Planned multi-architecture support
-- Development and production variants
-
 ## Quick Start
 
-For most users, we recommend starting with the **Automated Script Installation**:
+For most users, we recommend starting with **Docker Installation**:
 
 ```bash
-# Download the installer
-wget https://github.com/5q12-ccls/5q12-s-Indexer/raw/main/install.sh
-
-# Make it executable
-chmod +x install.sh
-
-# Run installation (requires sudo)
-sudo ./install.sh install /var/www/html/files
+# Create docker-compose.yml with the configuration
+# Replace /your/host/path with actual directories
+docker-compose up -d
 ```
+
+Access at: `http://localhost:5012`
 
 ## System Requirements
 
-**Minimum requirements for all installation methods:**
+**For Docker installation:**
+- Docker and Docker Compose
+- 512MB RAM minimum (1GB+ recommended)
+- 100MB disk space
+
+**For script/manual installation:**
 - Linux-based operating system
 - PHP 8.3 or higher
 - Web server (Nginx recommended, Apache supported)
@@ -68,13 +73,23 @@ sudo ./install.sh install /var/www/html/files
 - sudo privileges
 - Internet connection for package downloads
 
+## Post-Installation
+
+After installation with any method:
+
+1. **Access the indexer** via your web browser
+2. **Configure settings** in `.indexer_files/config.json` (auto-created)
+3. **Add content** to the files directory
+4. **Review security settings** for production use
+
 ## Support
 
 If you encounter issues with any installation method:
 
-1. Check the [Troubleshooting Guide](troubleshooting.md)
-2. Review the [Configuration Guide](configuration.md) for post-installation setup
-3. Consult the [Security Guide](security.md) for hardening recommendations
+1. Check the method-specific installation guide
+2. Review the [Troubleshooting Guide](troubleshooting.md)
+3. Consult the [Configuration Guide](configuration.md) for post-installation setup
+4. See the [Security Guide](security.md) for hardening recommendations
 
 ---
 

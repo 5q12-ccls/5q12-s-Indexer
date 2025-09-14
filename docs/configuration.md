@@ -65,6 +65,28 @@
 | `sqlite` | **High** (5-10x faster) | Requires SQLite3 extension | Production, large directories |
 | `json` | Standard | Universal | Simple setups, small directories |
 
+#### Icon Type
+```json
+{
+  "main": {
+    "icon_type": "default"  // "default", "minimal", "emoji", "disabled"
+  }
+}
+```
+
+| Option | Description | Bandwidth | Use Case |
+|--------|-------------|-----------|----------|
+| `default` | Full icon library with type-specific icons | High | Standard usage, visual file identification |
+| `minimal` | Generic file/folder icons only | Low | Bandwidth-limited environments |
+| `emoji` | Unicode emoji icons (📄/📁) | Minimal | No external resources, universal compatibility |
+| `disabled` | No icons displayed | None | Text-only interfaces, accessibility |
+
+**Icon behavior:**
+- `default` - Uses extensive icon library from API or local storage
+- `minimal` - Shows only `folder.png` and `non-descript-default-file.png`
+- `emoji` - Uses Unicode file (📄) and folder (📁) symbols
+- `disabled` - Removes icon column entirely, adjusts layout
+
 #### Local Icons
 ```json
 {
@@ -79,6 +101,8 @@
 - Offline capability
 - Reduced API dependency
 - Better reliability
+
+**Note:** Only applies when `icon_type` is `"default"` or `"minimal"`
 
 ### API Settings
 
@@ -285,6 +309,7 @@ Force inclusion, overriding other exclusions.
   "version": "1.0",
   "main": {
     "cache_type": "sqlite",
+    "icon_type": "minimal",
     "local_icons": true,
     "disable_api": true,
     "disable_file_downloads": true,
@@ -310,6 +335,7 @@ Force inclusion, overriding other exclusions.
   "version": "1.0",
   "main": {
     "cache_type": "sqlite",
+    "icon_type": "default",
     "index_hidden": true,
     "allow_list": "src*, docs*, config/dev.json"
   },
@@ -332,6 +358,7 @@ Force inclusion, overriding other exclusions.
   "version": "1.0",
   "main": {
     "cache_type": "sqlite",
+    "icon_type": "emoji",
     "local_icons": true,
     "deny_list": "admin, private, .htaccess, config"
   },
@@ -354,6 +381,7 @@ Force inclusion, overriding other exclusions.
   "version": "1.0",
   "main": {
     "cache_type": "sqlite",
+    "icon_type": "default",
     "deny_list": "system, config, logs"
   },
   "exclusions": {

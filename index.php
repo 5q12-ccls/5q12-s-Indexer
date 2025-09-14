@@ -1,7 +1,10 @@
 <?php
 $apiBaseUrl = 'https://api.indexer.ccls.icu';
 $scriptDir = dirname(__FILE__);
-$baseDir = $scriptDir;
+$baseDir = $scriptDir . '/files';
+if (!is_dir($baseDir)) {
+    mkdir($baseDir, 0755, true);
+}
 $documentRoot = $_SERVER['DOCUMENT_ROOT'];
 $scriptPath = str_replace($documentRoot, '', $scriptDir);
 $webPath = rtrim($scriptPath, '/');
@@ -14,7 +17,7 @@ $currentPath = isset($_GET['path']) ? $_GET['path'] : '';
 $currentPath = ltrim($currentPath, '/');
 $currentPath = str_replace(['../', './'], '', $currentPath);
 $fullPath = $baseDir . '/' . $currentPath;
-$webCurrentPath = $webPath . '/' . $currentPath;
+$webCurrentPath = '/files' . ($currentPath ? '/' . $currentPath : '');
 $indexerFilesDir = $scriptDir . '/.indexer_files';
 $zipCacheDir = $indexerFilesDir . '/zip_cache';
 $indexCacheDir = $indexerFilesDir . '/index_cache';
@@ -217,7 +220,7 @@ function checkAndUpdateConfig() {
     if ($disableApi) {
         return false;
     }
-    $localVersion = isset($config['version']) ? $config['version'] : '1.1.10';
+    $localVersion = isset($config['version']) ? $config['version'] : '1.1.12';
     try {
         $cacheKey = 'version_check_' . $localVersion;
         if ($cacheInstance !== null) {
@@ -257,7 +260,7 @@ function checkAndUpdateConfig() {
             return false;
         }
         $latestConfig = $latestConfigData['config'];
-        $latestVersion = isset($latestConfig['version']) ? $latestConfig['version'] : '1.1.10';
+        $latestVersion = isset($latestConfig['version']) ? $latestConfig['version'] : '1.1.12';
         if ($localVersion === $latestVersion) {
             if ($cacheInstance !== null) {
                 $cacheInstance->set($cacheKey, 'version', false, 3600);
@@ -298,8 +301,8 @@ function mergeConfigUpdates($localConfig, $latestConfig) {
         $changes = [];
         $updated = false;
         $mergedConfig = $localConfig;
-        $oldVersion = isset($localConfig['version']) ? $localConfig['version'] : '1.1.10';
-        $newVersion = isset($latestConfig['version']) ? $latestConfig['version'] : '1.1.10';
+        $oldVersion = isset($localConfig['version']) ? $localConfig['version'] : '1.1.12';
+        $newVersion = isset($latestConfig['version']) ? $latestConfig['version'] : '1.1.12';
         $mergedConfig['version'] = $newVersion;
         $changes[] = "Updated version from {$oldVersion} to {$newVersion}";
         $updated = true;
@@ -358,7 +361,6 @@ function logConfigUpdate($oldVersion, $newVersion, $changes) {
 }
 function ensureLocalResources() {
     global $apiBaseUrl, $localApiDir, $localStyleDir, $localExtensionMapFile, $localIconsFile, $iconsDir, $iconType, $localConfigReferenceFile;
-    
     if (!is_dir($localApiDir)) {
         mkdir($localApiDir, 0755, true);
     }
@@ -368,7 +370,6 @@ function ensureLocalResources() {
     if (!is_dir($iconsDir)) {
         mkdir($iconsDir, 0755, true);
     }
-
     if (!file_exists($localExtensionMapFile)) {
         $extensionMapUrl = $apiBaseUrl . '/extensionMap.json';
         $extensionMapData = @file_get_contents($extensionMapUrl);
@@ -376,7 +377,6 @@ function ensureLocalResources() {
             file_put_contents($localExtensionMapFile, $extensionMapData);
         }
     }
-
     if (!file_exists($localConfigReferenceFile)) {
         $referenceUrl = $apiBaseUrl . '/api.php?action=configReference';
         $referenceResponse = @file_get_contents($referenceUrl);
@@ -387,13 +387,11 @@ function ensureLocalResources() {
             }
         }
     }
-
     if (!file_exists($localIconsFile)) {
         $iconsJsonUrl = $apiBaseUrl . '/icons.json';
         $iconsJsonData = @file_get_contents($iconsJsonUrl);
         if ($iconsJsonData !== false) {
             file_put_contents($localIconsFile, $iconsJsonData);
-            
             $iconsData = json_decode($iconsJsonData, true);
             if ($iconsData && is_array($iconsData)) {
                 foreach ($iconsData as $extension => $iconFile) {
@@ -409,7 +407,6 @@ function ensureLocalResources() {
             }
         }
     }
-
     if ($iconType === 'minimal' || $iconType === 'default') {
         $requiredIcons = ['folder.png', 'non-descript-default-file.png'];
         foreach ($requiredIcons as $iconFile) {
@@ -423,14 +420,12 @@ function ensureLocalResources() {
             }
         }
     }
-
-    $stylesheetPath = $localStyleDir . '/35bca3b572d3d428ce795d6f5b1aacce.css';
+    $stylesheetPath = $localStyleDir . '/7dd0cac549d6b92defbf4293119a63cb.css';
     if (!file_exists($stylesheetPath)) {
-        $stylesheetUrl = $apiBaseUrl . '/style/35bca3b572d3d428ce795d6f5b1aacce.css';
+        $stylesheetUrl = $apiBaseUrl . '/style/7dd0cac549d6b92defbf4293119a63cb.css';
         $stylesheetData = @file_get_contents($stylesheetUrl);
         if ($stylesheetData !== false) {
             @file_put_contents($stylesheetPath, $stylesheetData);
-            
             $fontFiles = [
                 'cyrillic-ext-400.woff2', 'cyrillic-400.woff2', 'greek-400.woff2',
                 'vietnamese-400.woff2', 'latin-ext-400.woff2', 'latin-400.woff2',
@@ -578,18 +573,14 @@ function getIconPath($type, $extension = '') {
 }
 function getIconFromLocal($type, $extension = '') {
     global $iconsDir;
-    
     $iconMappings = loadLocalIconMappings();
-    
     if ($type === 'folder') {
         $iconFile = isset($iconMappings['folder']) ? $iconMappings['folder'] : 'folder.png';
     } else {
         $extension = strtolower($extension);
         $iconFile = isset($iconMappings[$extension]) ? $iconMappings[$extension] : 'non-descript-default-file.png';
     }
-    
     $iconPath = $iconsDir . '/' . $iconFile;
-    
     if (!file_exists($iconPath)) {
         if ($type === 'folder') {
             $iconFile = 'folder.png';
@@ -597,12 +588,10 @@ function getIconFromLocal($type, $extension = '') {
             $iconFile = 'non-descript-default-file.png';
         }
         $iconPath = $iconsDir . '/' . $iconFile;
-        
         if (!file_exists($iconPath)) {
             return null;
         }
     }
-    
     return [
         'filename' => $iconFile,
         'path' => $iconPath,
@@ -613,10 +602,10 @@ function getIconFromLocal($type, $extension = '') {
 function getStylesheetUrl() {
     global $webPath, $disableApi, $localStyleDir, $apiBaseUrl, $scriptDir;
     if ($disableApi) {
-        $relativePath = str_replace($scriptDir, '', $localStyleDir . '/35bca3b572d3d428ce795d6f5b1aacce.css');
+        $relativePath = str_replace($scriptDir, '', $localStyleDir . '/7dd0cac549d6b92defbf4293119a63cb.css');
         return $webPath . $relativePath;
     } else {
-        return $apiBaseUrl . '/style/35bca3b572d3d428ce795d6f5b1aacce.css';
+        return $apiBaseUrl . '/style/7dd0cac549d6b92defbf4293119a63cb.css';
     }
 }
 function shouldIndexFile($filename, $extension) {
@@ -833,14 +822,17 @@ class IndexerCache {
                     return null;
                 }
                 if ($type === 'directory') {
-                    $currentModified = $this->getPathLastModified($key);
+                    $actualPath = preg_replace('/_sort_.*$/', '', $key);
+                    $currentModified = $this->getPathLastModified($actualPath);
                     if ($result['last_modified'] < $currentModified) {
+                        $this->pdo->prepare("DELETE FROM unified_cache WHERE cache_key = ? AND cache_type = ?")->execute([$key, $type]);
                         return null;
                     }
                 }
                 return json_decode($result['data'], true);
             }
         } catch (Exception $e) {
+            error_log("Cache error: " . $e->getMessage());
         }
         return null;
     }
@@ -848,10 +840,16 @@ class IndexerCache {
         if (!$this->pdo) return;
         try {
             $expiresAt = $ttl ? time() + $ttl : null;
-            $lastModified = ($type === 'directory') ? $this->getPathLastModified($key) : time();
+            if ($type === 'directory') {
+                $actualPath = preg_replace('/_sort_.*$/', '', $key);
+                $lastModified = $this->getPathLastModified($actualPath);
+            } else {
+                $lastModified = time();
+            }
             $stmt = $this->pdo->prepare("INSERT OR REPLACE INTO unified_cache (cache_key, cache_type, data, last_modified, expires_at) VALUES (?, ?, ?, ?, ?)");
             $stmt->execute([$key, $type, json_encode($data), $lastModified, $expiresAt]);
         } catch (Exception $e) {
+            error_log("Cache set error: " . $e->getMessage());
         }
     }
     private function getJSONCache($key, $type) {
@@ -869,8 +867,11 @@ class IndexerCache {
                 return null;
             }
             if ($type === 'directory') {
-                $currentModified = $this->getPathLastModified($key);
+                $actualPath = preg_replace('/_sort_.*$/', '', $key);
+                $currentModified = $this->getPathLastModified($actualPath);
                 if ($item['last_modified'] < $currentModified) {
+                    unset($cacheData[$cacheKey]);
+                    file_put_contents($cacheFile, json_encode($cacheData, JSON_PRETTY_PRINT));
                     return null;
                 }
             }
@@ -886,7 +887,12 @@ class IndexerCache {
         }
         $cacheKey = $type . ':' . $key;
         $expiresAt = $ttl ? time() + $ttl : null;
-        $lastModified = ($type === 'directory') ? $this->getPathLastModified($key) : time();
+        if ($type === 'directory') {
+            $actualPath = preg_replace('/_sort_.*$/', '', $key);
+            $lastModified = $this->getPathLastModified($actualPath);
+        } else {
+            $lastModified = time();
+        }
         $cacheData[$cacheKey] = [
             'cache_type' => $type,
             'data' => $data,
@@ -921,16 +927,33 @@ class IndexerCache {
     }
     private function getPathLastModified($path) {
         global $baseDir, $configFile;
-        $fullPath = $baseDir . '/' . $path;
+        $fullPath = $baseDir . '/' . ltrim($path, '/');
         if (!is_dir($fullPath)) return 0;
         $lastModified = filemtime($fullPath);
         $items = scandir($fullPath);
         foreach ($items as $item) {
             if ($item == '.' || $item == '..') continue;
             $itemPath = $fullPath . '/' . $item;
-            $itemModified = filemtime($itemPath);
-            if ($itemModified > $lastModified) {
-                $lastModified = $itemModified;
+            if (is_readable($itemPath)) {
+                $itemModified = filemtime($itemPath);
+                if ($itemModified > $lastModified) {
+                    $lastModified = $itemModified;
+                }
+                if (is_dir($itemPath)) {
+                    $subItems = @scandir($itemPath);
+                    if ($subItems) {
+                        foreach ($subItems as $subItem) {
+                            if ($subItem == '.' || $subItem == '..') continue;
+                            $subItemPath = $itemPath . '/' . $subItem;
+                            if (is_readable($subItemPath)) {
+                                $subItemModified = filemtime($subItemPath);
+                                if ($subItemModified > $lastModified) {
+                                    $lastModified = $subItemModified;
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
         if (file_exists($configFile)) {
@@ -1356,7 +1379,7 @@ function getBreadcrumbs($currentPath) {
     global $webPath;
     $currentScript = $_SERVER['SCRIPT_NAME'];
     $parts = array_filter(explode('/', $currentPath));
-    $breadcrumbs = '<a href="' . $currentScript . '">content</a>';
+    $breadcrumbs = '<a href="' . $currentScript . '">files</a>';
     $path = '';
     foreach ($parts as $part) {
         $path .= '/' . $part;
@@ -1370,6 +1393,7 @@ function getBreadcrumbs($currentPath) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- CHANGE: Updated title to reflect files/ structure -->
     <title>Index of <?php echo htmlspecialchars($webCurrentPath); ?></title>
     <link rel="stylesheet" href="<?php echo getStylesheetUrl(); ?>">
 </head>
@@ -1377,6 +1401,7 @@ function getBreadcrumbs($currentPath) {
     <body<?php if ($iconType === 'disabled') echo ' class="icon-disabled"'; ?>>
     <div class="container">
         <div class="header">
+            <!-- CHANGE: Updated header to reflect files/ structure -->
             <h1>Index of <?php echo htmlspecialchars($webCurrentPath); ?></h1>
             <div class="breadcrumbs"><?php echo getBreadcrumbs($currentPath); ?></div>
         </div>

@@ -129,7 +129,7 @@ function handleVersionCheckRequest() {
     if ($config === null) {
         errorResponse('Invalid configuration file', 500);
     }
-    $latestVersion = isset($config['version']) ? $config['version'] : '1.1.10';
+    $latestVersion = isset($config['version']) ? $config['version'] : '1.1.12';
     $updateNeeded = version_compare($currentVersion, $latestVersion, '<');
     $response = [
         'success' => true,
@@ -251,7 +251,7 @@ function handleConfigRequest() {
     jsonResponse([
         'success' => true,
         'config' => $config,
-        'version' => '1.1.10',
+        'version' => '1.1.12',
         'last_modified' => filemtime($configFile)
     ]);
 }
@@ -312,7 +312,7 @@ function handleStatusRequest() {
     $status = [
         'success' => true,
         'service' => 'Indexer API',
-        'version' => '1.1.10',
+        'version' => '1.1.12',
         'timestamp' => date('Y-m-d H:i:s'),
         'config_exists' => file_exists($configFile),
         'icons_dir_exists' => is_dir($iconsDir),
@@ -357,7 +357,7 @@ function handleConfigReferenceRequest() {
         'success' => true,
         'content' => $content,
         'last_modified' => $lastModified,
-        'version' => '1.2',
+        'version' => '1.1.12',
         'format' => 'text'
     ]);
 }
@@ -365,7 +365,7 @@ function handleDefaultRequest() {
     $info = [
         'success' => true,
         'service' => 'Indexer API',
-        'version' => '1.1.10',
+        'version' => '1.1.12',
         'description' => 'API for the custom indexer project',
         'endpoints' => [
             'versionCheck' => [
