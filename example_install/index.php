@@ -153,12 +153,81 @@ function pathMatchesRule($relativePath, $rule, $isFolder = false) {
                     }
                 }
             }
-        } elseif ($rule['target'] === 'folder' && $isFolder) {
-            return strpos($relativePath, $rulePath) === 0;
+        } elseif ($rule['target'] === 'folder') {
+            if ($isFolder) {
+                $pathParts = explode('/', $relativePath);
+                $topLevelFolder = $pathParts[0];
+                if (count($pathParts) === 1 && strpos($topLevelFolder, $rulePath) === 0) {
+                    return true;
+                }
+                return false;
+            } else {
+                $fileDir = dirname($relativePath);
+                if ($fileDir === '.') $fileDir = '';
+                if (strpos($fileDir, '/') === false) {
+                    return strpos($fileDir, $rulePath) === 0;
+                }
+                return false;
+            }
         }
     }
     if ($rule['type'] === 'folder_recursive') {
-        return strpos($relativePath, $rulePath . '/') === 0 || $relativePath === $rulePath;
+        if ($relativePath === $rulePath) {
+            return true;
+        }
+        return strpos($relativePath, $rulePath . '/') === 0;
+    }
+    return false;
+}
+function pathMatchesRuleForIndexing($relativePath, $rule, $isFolder = false) {
+    $rulePath = $rule['path'];
+    if ($rule['type'] === 'exact') {
+        return $relativePath === $rulePath;
+    }
+    if ($rule['type'] === 'wildcard') {
+        if ($rule['target'] === 'file' && !$isFolder) {
+            if (strpos($rulePath, '/') !== false) {
+                $lastSlashPos = strrpos($rulePath, '/');
+                $directory = substr($rulePath, 0, $lastSlashPos);
+                $pattern = substr($rulePath, $lastSlashPos + 1);
+                $fileDir = dirname($relativePath);
+                $fileName = basename($relativePath);
+                $directory = rtrim($directory, '/');
+                $fileDir = rtrim($fileDir, '/');
+                if ($fileDir === $directory) {
+                    if (strpos($pattern, '.') === 0) {
+                        $extension = substr($pattern, 1, -1);
+                        $fileExtension = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
+                        return $fileExtension === $extension;
+                    } else {
+                        $regexPattern = str_replace('*', '.*', preg_quote($pattern, '/'));
+                        return preg_match('/^' . $regexPattern . '$/i', $fileName);
+                    }
+                }
+            }
+        } elseif ($rule['target'] === 'folder') {
+            if ($isFolder) {
+                $pathParts = explode('/', $relativePath);
+                $topLevelFolder = $pathParts[0];
+                if (count($pathParts) === 1 && strpos($topLevelFolder, $rulePath) === 0) {
+                    return true;
+                }
+                return false;
+            } else {
+                $fileDir = dirname($relativePath);
+                if ($fileDir === '.') $fileDir = '';
+                if (strpos($fileDir, '/') === false) {
+                    return strpos($fileDir, $rulePath) === 0;
+                }
+                return false;
+            }
+        }
+    }
+    if ($rule['type'] === 'folder_recursive') {
+        if ($relativePath === $rulePath) {
+            return true;
+        }
+        return strpos($relativePath, $rulePath . '/') === 0;
     }
     return false;
 }
@@ -174,6 +243,23 @@ function isPathDenied($relativePath, $isFolder = false) {
         }
         if ($isConflicting) continue;
         if (pathMatchesRule($relativePath, $rule, $isFolder)) {
+            return true;
+        }
+    }
+    return false;
+}
+function isPathDeniedForIndexing($relativePath, $isFolder = false) {
+    global $denyList, $conflictingRules;
+    foreach ($denyList as $rule) {
+        $isConflicting = false;
+        foreach ($conflictingRules as $conflict) {
+            if ($conflict['deny'] === $rule['original']) {
+                $isConflicting = true;
+                break;
+            }
+        }
+        if ($isConflicting) continue;
+        if (pathMatchesRuleForIndexing($relativePath, $rule, $isFolder)) {
             return true;
         }
     }
@@ -215,12 +301,270 @@ function isContentAllowedByWildcard($relativePath, $isFolder = false) {
     }
     return false;
 }
+function isFolderAccessible($currentPath) {
+    global $denyList, $allowList, $conflictingRules, $config;
+    if (isset($config['main']['index_all']) && $config['main']['index_all']) {
+        return true;
+    }
+    foreach ($allowList as $rule) {
+        $isConflicting = false;
+        foreach ($conflictingRules as $conflict) {
+            if ($conflict['allow'] === $rule['original']) {
+                $isConflicting = true;
+                break;
+            }
+        }
+        if ($isConflicting) continue;
+        if (pathMatchesRule($currentPath, $rule, true)) {
+            return true;
+        }
+    }
+    foreach ($denyList as $rule) {
+        $isConflicting = false;
+        foreach ($conflictingRules as $conflict) {
+            if ($conflict['deny'] === $rule['original']) {
+                $isConflicting = true;
+                break;
+            }
+        }
+        if ($isConflicting) continue;
+        if ($rule['type'] === 'folder_recursive') {
+            if ($currentPath === $rule['path'] || strpos($currentPath, $rule['path'] . '/') === 0) {
+                return false;
+            }
+        } elseif ($rule['type'] === 'wildcard' && $rule['target'] === 'folder') {
+            $pathParts = explode('/', $currentPath);
+            $topLevelFolder = $pathParts[0];
+            if (strpos($topLevelFolder, $rule['path']) === 0) {
+                if ($currentPath === $topLevelFolder) {
+                    return false;
+                }
+            }
+        } elseif ($rule['type'] === 'exact') {
+            if ($currentPath === $rule['path']) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+function shouldIndexFile($filename, $extension) {
+    global $config, $currentPath;
+    $relativePath = $currentPath ? $currentPath . '/' . basename($filename) : basename($filename);
+    if (isPathDeniedForIndexing($relativePath, false)) {
+        if (isPathAllowed($relativePath, false)) {
+            return true;
+        }
+        return false;
+    }
+    if (isContentAllowedByWildcard($relativePath, false)) {
+        return true;
+    }
+    if (isPathAllowed($relativePath, false)) {
+        return true;
+    }
+    if (isset($config['main']['index_all']) && $config['main']['index_all']) {
+        return true;
+    }
+    if (strpos(basename($filename), '.') === 0) {
+        if (!isset($config['main']['index_hidden']) || !$config['main']['index_hidden']) {
+            return false;
+        }
+    }
+    $settingKey = getExtensionSetting($extension, 'indexing');
+    if ($settingKey !== null) {
+        return isset($config['exclusions'][$settingKey]) ? $config['exclusions'][$settingKey] : true;
+    }
+    return true;
+}
+function shouldIndexFolder($foldername) {
+    global $config, $currentPath;
+    $relativePath = $currentPath ? $currentPath . '/' . basename($foldername) : basename($foldername);
+    if (basename($foldername) === '.indexer_files') {
+        if (isset($config['main']['index_all']) && $config['main']['index_all']) {
+            return true;
+        }
+        return false;
+    }
+    if (isPathDenied($relativePath, true)) {
+        if (isPathAllowed($relativePath, true)) {
+            return true;
+        }
+        return false;
+    }
+    if (isContentAllowedByWildcard($relativePath, true)) {
+        return true;
+    }
+    if (isPathAllowed($relativePath, true)) {
+        return true;
+    }
+    if (isset($config['main']['index_all']) && $config['main']['index_all']) {
+        return true;
+    }
+    if (strpos(basename($foldername), '.') === 0) {
+        if (!isset($config['main']['index_hidden']) || !$config['main']['index_hidden']) {
+            return false;
+        }
+    }
+    return isset($config['exclusions']['index_folders']) ? $config['exclusions']['index_folders'] : true;
+}
+function isFileAccessible($filePath, $currentPath, $extension) {
+    global $config, $disableFileDownloads;
+    if (!isFolderAccessible($currentPath)) {
+        return false;
+    }
+    $fileName = basename($filePath);
+    $relativePath = $currentPath ? $currentPath . '/' . $fileName : $fileName;
+    if (isPathDenied($relativePath, false)) {
+        if (!isPathAllowed($relativePath, false)) {
+            return false;
+        }
+    }
+    if (!shouldIndexFile($filePath, $extension)) {
+        return false;
+    }
+    return true;
+}
+function getFileActionMenu($file, $currentPath) {
+    global $disableFileDownloads;
+    $currentScript = $_SERVER['SCRIPT_NAME'];
+    $extension = $file['extension'];
+    $fileName = $file['name'];
+    $isViewable = isFileViewable($extension);
+    $showActions = isset($_GET['action']) && $_GET['action'] === $fileName;
+    $menu = '<div class="item-actions-menu">';
+    if ($showActions) {
+        $closeParams = $_GET;
+        unset($closeParams['action']);
+        unset($closeParams['options']);
+        $menu .= '<a href="' . $currentScript . ($closeParams ? '?' . http_build_query($closeParams) : '') . '" class="actions-toggle">×</a>';
+        $menu .= '<div class="actions-dropdown">';
+        if ($isViewable) {
+            $openUrl = getFileUrl($currentPath, $fileName);
+            $menu .= '<a href="' . htmlspecialchars($openUrl) . '">Open</a>';
+            $menu .= '<a href="' . htmlspecialchars($openUrl) . '" target="_blank">Open in new tab</a>';
+        }
+        if (!$disableFileDownloads) {
+            $downloadUrl = $currentScript . '?' . http_build_query(['path' => $currentPath, 'download' => '1', 'file' => $fileName]);
+            $menu .= '<a href="' . htmlspecialchars($downloadUrl) . '">Download</a>';
+        }
+        if ($isViewable) {
+            $shareParams = array_merge($_GET, ['share_popup' => 'view', 'share_file' => $fileName]);
+            $menu .= '<a href="' . $currentScript . '?' . http_build_query($shareParams) . '">Share</a>';
+        } else {
+            $shareParams = array_merge($_GET, ['share_popup' => 'folder', 'share_file' => $fileName]);
+            $menu .= '<a href="' . $currentScript . '?' . http_build_query($shareParams) . '">Share</a>';
+        }
+        if (!$disableFileDownloads) {
+            $shareParams = array_merge($_GET, ['share_popup' => 'download', 'share_file' => $fileName]);
+            $menu .= '<a href="' . $currentScript . '?' . http_build_query($shareParams) . '">Share Download</a>';
+        }
+        $menu .= '</div>';
+    } else {
+        $actionParams = $_GET;
+        unset($actionParams['options']);
+        if (isset($actionParams['action'])) {
+            unset($actionParams['action']);
+        }
+        $actionParams['action'] = $fileName;
+        $menu .= '<a href="' . $currentScript . '?' . http_build_query($actionParams) . '" class="actions-toggle">⋯</a>';
+    }
+    $menu .= '</div>';
+    return $menu;
+}
+function getFolderActionMenu($folder, $currentPath) {
+    global $disableFolderDownloads;
+    $currentScript = $_SERVER['SCRIPT_NAME'];
+    $folderName = $folder['name'];
+    $showActions = isset($_GET['action']) && $_GET['action'] === $folderName;
+    $menu = '<div class="item-actions-menu">';
+    if ($showActions) {
+        $closeParams = $_GET;
+        unset($closeParams['action']);
+        unset($closeParams['options']);
+        $menu .= '<a href="' . $currentScript . ($closeParams ? '?' . http_build_query($closeParams) : '') . '" class="actions-toggle">×</a>';
+        $menu .= '<div class="actions-dropdown">';
+        $openUrl = $currentScript . '?path=' . urlencode(($currentPath ? $currentPath . '/' : '') . $folderName);
+        $menu .= '<a href="' . htmlspecialchars($openUrl) . '">Open</a>';
+        $menu .= '<a href="' . htmlspecialchars($openUrl) . '" target="_blank">Open in new tab</a>';
+        if (!$disableFolderDownloads) {
+            $downloadUrl = $currentScript . '?' . http_build_query(['path' => $currentPath, 'download' => '1', 'file' => $folderName]);
+            $menu .= '<a href="' . htmlspecialchars($downloadUrl) . '">Download</a>';
+        }
+        $shareParams = array_merge($_GET, ['share_popup' => 'view', 'share_file' => $folderName]);
+        $menu .= '<a href="' . $currentScript . '?' . http_build_query($shareParams) . '">Share</a>';
+        if (!$disableFolderDownloads) {
+            $shareParams = array_merge($_GET, ['share_popup' => 'download', 'share_file' => $folderName]);
+            $menu .= '<a href="' . $currentScript . '?' . http_build_query($shareParams) . '">Share Download</a>';
+        }
+        $menu .= '</div>';
+    } else {
+        $actionParams = $_GET;
+        unset($actionParams['options']);
+        if (isset($actionParams['action'])) {
+            unset($actionParams['action']);
+        }
+        $actionParams['action'] = $folderName;
+        $menu .= '<a href="' . $currentScript . '?' . http_build_query($actionParams) . '" class="actions-toggle">⋯</a>';
+    }
+    $menu .= '</div>';
+    return $menu;
+}
+function getAbsoluteUrl($relativeUrl) {
+    $protocol = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http';
+    $host = $_SERVER['HTTP_HOST'];
+    if (strpos($relativeUrl, '/') === 0) {
+        return $protocol . '://' . $host . $relativeUrl;
+    } else {
+        $currentDir = dirname($_SERVER['REQUEST_URI']);
+        return $protocol . '://' . $host . rtrim($currentDir, '/') . '/' . $relativeUrl;
+    }
+}
+function generateSharePopup($shareType, $shareFile, $currentPath) {
+    $currentScript = $_SERVER['SCRIPT_NAME'];
+    if ($shareType === 'view') {
+        if (is_dir($GLOBALS['fullPath'] . '/' . $shareFile)) {
+            $shareUrl = $currentScript . '?path=' . urlencode(($currentPath ? $currentPath . '/' : '') . $shareFile);
+            $popupTitle = 'Share Folder Link';
+            $popupText = 'Copy the following URL to share folder';
+        } else {
+            $shareUrl = getFileUrl($currentPath, $shareFile);
+            $popupTitle = 'Share File Link';
+            $popupText = 'Copy the following URL to view file';
+        }
+    } elseif ($shareType === 'folder') {
+        $shareUrl = $currentScript . ($currentPath ? '?path=' . urlencode($currentPath) : '');
+        $popupTitle = 'Share Folder Location';
+        $popupText = 'Copy the following URL to share the folder containing';
+    } elseif ($shareType === 'download') {
+        $shareUrl = $currentScript . '?' . http_build_query(['path' => $currentPath, 'download' => '1', 'file' => $shareFile]);
+        $popupTitle = 'Share Download Link';
+        $popupText = 'Copy the following URL to download';
+    }
+    $absoluteShareUrl = getAbsoluteUrl($shareUrl);
+    $closeParams = $_GET;
+    unset($closeParams['share_popup']);
+    unset($closeParams['share_file']);
+    $closeUrl = $currentScript . ($closeParams ? '?' . http_build_query($closeParams) : '');
+    return '
+    <div class="share-popup-overlay">
+        <div class="share-popup">
+            <h3>' . htmlspecialchars($popupTitle) . '</h3>
+            <p>' . htmlspecialchars($popupText) . ' "<strong>' . htmlspecialchars($shareFile) . '</strong>":</p>
+            <div class="share-url-container">' . htmlspecialchars($absoluteShareUrl) . '</div>
+            <p><small>Select the URL above and copy it (Ctrl+C / Cmd+C)</small></p>
+            <div class="popup-buttons">
+                <a href="' . htmlspecialchars($closeUrl) . '" class="popup-btn">Close</a>
+            </div>
+        </div>
+    </div>';
+}
 function checkAndUpdateConfig() {
     global $apiBaseUrl, $configFile, $config, $disableApi, $cacheInstance;
     if ($disableApi) {
         return false;
     }
-    $localVersion = isset($config['version']) ? $config['version'] : '1.1.12';
+    $localVersion = isset($config['version']) ? $config['version'] : '1.1.13';
     try {
         $cacheKey = 'version_check_' . $localVersion;
         if ($cacheInstance !== null) {
@@ -260,7 +604,7 @@ function checkAndUpdateConfig() {
             return false;
         }
         $latestConfig = $latestConfigData['config'];
-        $latestVersion = isset($latestConfig['version']) ? $latestConfig['version'] : '1.1.12';
+        $latestVersion = isset($latestConfig['version']) ? $latestConfig['version'] : '1.1.13';
         if ($localVersion === $latestVersion) {
             if ($cacheInstance !== null) {
                 $cacheInstance->set($cacheKey, 'version', false, 3600);
@@ -301,8 +645,8 @@ function mergeConfigUpdates($localConfig, $latestConfig) {
         $changes = [];
         $updated = false;
         $mergedConfig = $localConfig;
-        $oldVersion = isset($localConfig['version']) ? $localConfig['version'] : '1.1.12';
-        $newVersion = isset($latestConfig['version']) ? $latestConfig['version'] : '1.1.12';
+        $oldVersion = isset($localConfig['version']) ? $localConfig['version'] : '1.1.13';
+        $newVersion = isset($latestConfig['version']) ? $latestConfig['version'] : '1.1.13';
         $mergedConfig['version'] = $newVersion;
         $changes[] = "Updated version from {$oldVersion} to {$newVersion}";
         $updated = true;
@@ -420,9 +764,9 @@ function ensureLocalResources() {
             }
         }
     }
-    $stylesheetPath = $localStyleDir . '/7dd0cac549d6b92defbf4293119a63cb.css';
+    $stylesheetPath = $localStyleDir . '/ecf219b0e59edefbdc0124308ade7358.css';
     if (!file_exists($stylesheetPath)) {
-        $stylesheetUrl = $apiBaseUrl . '/style/7dd0cac549d6b92defbf4293119a63cb.css';
+        $stylesheetUrl = $apiBaseUrl . '/style/ecf219b0e59edefbdc0124308ade7358.css';
         $stylesheetData = @file_get_contents($stylesheetUrl);
         if ($stylesheetData !== false) {
             @file_put_contents($stylesheetPath, $stylesheetData);
@@ -602,71 +946,11 @@ function getIconFromLocal($type, $extension = '') {
 function getStylesheetUrl() {
     global $webPath, $disableApi, $localStyleDir, $apiBaseUrl, $scriptDir;
     if ($disableApi) {
-        $relativePath = str_replace($scriptDir, '', $localStyleDir . '/7dd0cac549d6b92defbf4293119a63cb.css');
+        $relativePath = str_replace($scriptDir, '', $localStyleDir . '/ecf219b0e59edefbdc0124308ade7358.css');
         return $webPath . $relativePath;
     } else {
-        return $apiBaseUrl . '/style/7dd0cac549d6b92defbf4293119a63cb.css';
+        return $apiBaseUrl . '/style/ecf219b0e59edefbdc0124308ade7358.css';
     }
-}
-function shouldIndexFile($filename, $extension) {
-    global $config, $currentPath;
-    $relativePath = $currentPath ? $currentPath . '/' . basename($filename) : basename($filename);
-    if (isPathDenied($relativePath, false)) {
-        if (isPathAllowed($relativePath, false)) {
-            return true;
-        }
-        return false;
-    }
-    if (isContentAllowedByWildcard($relativePath, false)) {
-        return true;
-    }
-    if (isPathAllowed($relativePath, false)) {
-        return true;
-    }
-    if (isset($config['main']['index_all']) && $config['main']['index_all']) {
-        return true;
-    }
-    if (strpos(basename($filename), '.') === 0) {
-        if (!isset($config['main']['index_hidden']) || !$config['main']['index_hidden']) {
-            return false;
-        }
-    }
-    $settingKey = getExtensionSetting($extension, 'indexing');
-    if ($settingKey !== null) {
-        return isset($config['exclusions'][$settingKey]) ? $config['exclusions'][$settingKey] : true;
-    }
-    return true;
-}
-function shouldIndexFolder($foldername) {
-    global $config, $currentPath;
-    $relativePath = $currentPath ? $currentPath . '/' . basename($foldername) : basename($foldername);
-    if (basename($foldername) === '.indexer_files') {
-        if (isset($config['main']['index_all']) && $config['main']['index_all']) {
-            return true;
-        }
-        return false;
-    }
-    if (isPathDenied($relativePath, true)) {
-        if (isPathAllowed($relativePath, true)) {
-            return true;
-        }
-        return false;
-    }
-    if (isContentAllowedByWildcard($relativePath, true)) {
-        return true;
-    }
-    if (isPathAllowed($relativePath, true)) {
-        return true;
-    }
-    if (isset($config['main']['index_all']) && $config['main']['index_all']) {
-        return true;
-    }
-    if (strpos(basename($foldername), '.') === 0) {
-        if (!isset($config['main']['index_hidden']) || !$config['main']['index_hidden']) {
-            return false;
-        }
-    }
-    return isset($config['exclusions']['index_folders']) ? $config['exclusions']['index_folders'] : true;
 }
 function isFileViewable($extension) {
     global $config;
@@ -1078,19 +1362,48 @@ if (isset($_GET['download']) && isset($_GET['file'])) {
     $normalizedBasePath = str_replace('//', '/', $baseDir);
     if (strpos($normalizedDownloadPath, $normalizedBasePath) !== 0) {
         http_response_code(403);
-        die('Access denied - path traversal detected');
+        header('Location: ' . $_SERVER['SCRIPT_NAME']);
+        exit;
     }
     if (strpos($downloadFile, '../') !== false || strpos($downloadFile, './') !== false) {
         http_response_code(403);
-        die('Access denied - invalid filename');
+        header('Location: ' . $_SERVER['SCRIPT_NAME']);
+        exit;
     }
     if (is_file($downloadPath)) {
+        $extension = strtolower(pathinfo($downloadFile, PATHINFO_EXTENSION));
+        if ($disableFileDownloads) {
+            http_response_code(403);
+            header('Location: ' . $_SERVER['SCRIPT_NAME']);
+            exit;
+        }
+        if (!isFileAccessible($downloadPath, $currentPath, $extension)) {
+            http_response_code(403);
+            header('Location: ' . $_SERVER['SCRIPT_NAME']);
+            exit;
+        }
         header('Content-Type: application/octet-stream');
         header('Content-Disposition: attachment; filename="' . basename($downloadFile) . '"');
         header('Content-Length: ' . filesize($downloadPath));
         readfile($downloadPath);
         exit;
     } elseif (is_dir($downloadPath)) {
+        if ($disableFolderDownloads) {
+            http_response_code(403);
+            header('Location: ' . $_SERVER['SCRIPT_NAME']);
+            exit;
+        }
+        $folderRelativePath = $currentPath ? $currentPath . '/' . basename($downloadFile) : basename($downloadFile);
+        if (isPathDenied($folderRelativePath, true) && !isPathAllowed($folderRelativePath, true)) {
+            http_response_code(403);
+            header('Location: ' . $_SERVER['SCRIPT_NAME']);
+            exit;
+        }
+        if (!shouldIndexFolder($downloadPath)) {
+            http_response_code(403);
+            header('Location: ' . $_SERVER['SCRIPT_NAME']);
+            exit;
+        }
         $tempHash = bin2hex(random_bytes(16));
         $tempDir = $zipCacheDir . '/' . $tempHash;
         if (copyDirectoryExcludePhp($downloadPath, $tempDir)) {
@@ -1110,15 +1423,18 @@ if (isset($_GET['download']) && isset($_GET['file'])) {
             } else {
                 deleteDirectory($tempDir);
                 http_response_code(500);
-                die('Failed to create zip file');
+                header('Location: ' . $_SERVER['SCRIPT_NAME']);
+                exit;
             }
         } else {
             http_response_code(500);
-            die('Failed to prepare directory for download');
+            header('Location: ' . $_SERVER['SCRIPT_NAME']);
+            exit;
         }
     }
     http_response_code(404);
-    die('File not found');
+    header('Location: ' . $_SERVER['SCRIPT_NAME']);
+    exit;
 }
 function addDirectoryToZip($zip, $dir, $zipPath = '') {
     $files = scandir($dir);
@@ -1137,6 +1453,11 @@ function addDirectoryToZip($zip, $dir, $zipPath = '') {
 if (!is_dir($fullPath)) {
     http_response_code(404);
     die('Directory not found');
+}
+if (!isFolderAccessible($currentPath)) {
+    http_response_code(403);
+    header('Location: ' . $_SERVER['SCRIPT_NAME']);
+    exit;
 }
 $sortParams = getSortParams();
 $sortBy = $sortParams['sort'];
@@ -1188,12 +1509,15 @@ function formatBytes($size) {
     return round($size, 1) . ' ' . $units[$i];
 }
 function getFileUrl($path, $filename) {
-    global $webPath;
+    global $webPath, $disableFileDownloads;
     $currentScript = $_SERVER['SCRIPT_NAME'];
     $extension = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
     if (isFileViewable($extension)) {
         return $currentScript . '?view=raw&file=' . urlencode($filename) . '&path=' . urlencode($path);
     } else {
+        if ($disableFileDownloads) {
+            return '#';
+        }
         return $currentScript . '?' . http_build_query(['path' => $path, 'download' => '1', 'file' => $filename]);
     }
 }
@@ -1254,126 +1578,134 @@ if (isset($_GET['view']) && $_GET['view'] === 'raw' && isset($_GET['file'])) {
     $normalizedBasePath = str_replace('//', '/', $baseDir);
     if (strpos($normalizedViewPath, $normalizedBasePath) !== 0) {
         http_response_code(403);
-        die('Access denied - path traversal detected');
+        header('Location: ' . $_SERVER['SCRIPT_NAME']);
+        exit;
     }
     if (strpos($viewFile, '../') !== false || strpos($viewFile, './') !== false) {
         http_response_code(403);
-        die('Access denied - invalid filename');
-    }
-    if (is_file($viewPath)) {
-        $extension = strtolower(pathinfo($viewFile, PATHINFO_EXTENSION));
-        if (isFileViewable($extension)) {
-            switch ($extension) {
-                case 'pdf':
-                    header('Content-Type: application/pdf');
-                    break;
-                case 'png':
-                    header('Content-Type: image/png');
-                    break;
-                case 'jpg':
-                case 'jpeg':
-                    header('Content-Type: image/jpeg');
-                    break;
-                case 'gif':
-                    header('Content-Type: image/gif');
-                    break;
-                case 'webp':
-                    header('Content-Type: image/webp');
-                    break;
-                case 'jfif':
-                    header('Content-Type: image/jpeg');
-                    break;
-                case 'avif':
-                    header('Content-Type: image/avif');
-                    break;
-                case 'ico':
-                    header('Content-Type: image/vnd.microsoft.icon');
-                    break;
-                case 'cur':
-                    header('Content-Type: image/vnd.microsoft.icon');
-                    break;
-                case 'tiff':
-                    header('Content-Type: image/tiff');
-                    break;
-                case 'bmp':
-                    header('Content-Type: image/bmp');
-                    break;
-                case 'heic':
-                    header('Content-Type: image/heic');
-                    break;
-                case 'svg':
-                    header('Content-Type: image/svg+xml');
-                    break;
-                case 'mp4':
-                    header('Content-Type: video/mp4');
-                    break;
-                case 'mkv':
-                    header('Content-Type: video/webm');
-                    break;
-                case 'mp3':
-                    header('Content-Type: audio/mpeg');
-                    break;
-                case 'aac':
-                    header('Content-Type: audio/aac');
-                    break;
-                case 'flac':
-                    header('Content-Type: audio/flac');
-                    break;
-                case 'm4a':
-                    header('Content-Type: audio/mp4');
-                    break;
-                case 'ogg':
-                    header('Content-Type: audio/ogg');
-                    break;
-                case 'opus':
-                    header('Content-Type: audio/ogg');
-                    break;
-                case 'wma':
-                    header('Content-Type: audio/x-ms-wma');
-                    break;
-                case 'mov':
-                    header('Content-Type: video/quicktime');
-                    break;
-                case 'webm':
-                    header('Content-Type: video/webm');
-                    break;
-                case 'wmv':
-                    header('Content-Type: video/x-ms-wmv');
-                    break;
-                case '3gp':
-                    header('Content-Type: video/3gpp');
-                    break;
-                case 'flv':
-                    header('Content-Type: video/x-flv');
-                    break;
-                case 'm4v':
-                    header('Content-Type: video/mp4');
-                    break;
-                case 'docx':
-                    header('Content-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document');
-                    header('Content-Transfer-Encoding: binary');
-                    header('Accept-Ranges: bytes');
-                    break;
-                case 'xlsx':
-                    header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-                    header('Content-Transfer-Encoding: binary');
-                    header('Accept-Ranges: bytes');
-                    break;
-                default:
-                    header('Content-Type: text/plain; charset=utf-8');
-                    break;
-            }
-            header('Content-Disposition: inline; filename="' . basename($viewFile) . '"');
-        } else {
-            header('Content-Type: application/octet-stream');
-            header('Content-Disposition: attachment; filename="' . basename($viewFile) . '"');
-        }
-        header('Content-Length: ' . filesize($viewPath));
-        readfile($viewPath);
+        header('Location: ' . $_SERVER['SCRIPT_NAME']);
         exit;
     }
-    http_response_code(404);
-    die('File not found');
+    if (!is_file($viewPath)) {
+        http_response_code(404);
+        header('Location: ' . $_SERVER['SCRIPT_NAME']);
+        exit;
+    }
+    $extension = strtolower(pathinfo($viewFile, PATHINFO_EXTENSION));
+    if (!isFileAccessible($viewPath, $currentPath, $extension)) {
+        http_response_code(403);
+        header('Location: ' . $_SERVER['SCRIPT_NAME']);
+        exit;
+    }
+    if (!isFileViewable($extension)) {
+        http_response_code(403);
+        header('Location: ' . $_SERVER['SCRIPT_NAME']);
+        exit;
+    }
+    switch ($extension) {
+        case 'pdf':
+            header('Content-Type: application/pdf');
+            break;
+        case 'png':
+            header('Content-Type: image/png');
+            break;
+        case 'jpg':
+        case 'jpeg':
+            header('Content-Type: image/jpeg');
+            break;
+        case 'gif':
+            header('Content-Type: image/gif');
+            break;
+        case 'webp':
+            header('Content-Type: image/webp');
+            break;
+        case 'jfif':
+            header('Content-Type: image/jpeg');
+            break;
+        case 'avif':
+            header('Content-Type: image/avif');
+            break;
+        case 'ico':
+            header('Content-Type: image/vnd.microsoft.icon');
+            break;
+        case 'cur':
+            header('Content-Type: image/vnd.microsoft.icon');
+            break;
+        case 'tiff':
+            header('Content-Type: image/tiff');
+            break;
+        case 'bmp':
+            header('Content-Type: image/bmp');
+            break;
+        case 'heic':
+            header('Content-Type: image/heic');
+            break;
+        case 'svg':
+            header('Content-Type: image/svg+xml');
+            break;
+        case 'mp4':
+            header('Content-Type: video/mp4');
+            break;
+        case 'mkv':
+            header('Content-Type: video/webm');
+            break;
+        case 'mp3':
+            header('Content-Type: audio/mpeg');
+            break;
+        case 'aac':
+            header('Content-Type: audio/aac');
+            break;
+        case 'flac':
+            header('Content-Type: audio/flac');
+            break;
+        case 'm4a':
+            header('Content-Type: audio/mp4');
+            break;
+        case 'ogg':
+            header('Content-Type: audio/ogg');
+            break;
+        case 'opus':
+            header('Content-Type: audio/ogg');
+            break;
+        case 'wma':
+            header('Content-Type: audio/x-ms-wma');
+            break;
+        case 'mov':
+            header('Content-Type: video/quicktime');
+            break;
+        case 'webm':
+            header('Content-Type: video/webm');
+            break;
+        case 'wmv':
+            header('Content-Type: video/x-ms-wmv');
+            break;
+        case '3gp':
+            header('Content-Type: video/3gpp');
+            break;
+        case 'flv':
+            header('Content-Type: video/x-flv');
+            break;
+        case 'm4v':
+            header('Content-Type: video/mp4');
+            break;
+        case 'docx':
+            header('Content-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+            header('Content-Transfer-Encoding: binary');
+            header('Accept-Ranges: bytes');
+            break;
+        case 'xlsx':
+            header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            header('Content-Transfer-Encoding: binary');
+            header('Accept-Ranges: bytes');
+            break;
+        default:
+            header('Content-Type: text/plain; charset=utf-8');
+            break;
+    }
+    header('Content-Disposition: inline; filename="' . basename($viewFile) . '"');
+    header('Content-Length: ' . filesize($viewPath));
+    readfile($viewPath);
+    exit;
 }
 function getBreadcrumbs($currentPath) {
     global $webPath;
@@ -1393,15 +1725,12 @@ function getBreadcrumbs($currentPath) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <!-- CHANGE: Updated title to reflect files/ structure -->
     <title>Index of <?php echo htmlspecialchars($webCurrentPath); ?></title>
     <link rel="stylesheet" href="<?php echo getStylesheetUrl(); ?>">
 </head>
-<body>
-    <body<?php if ($iconType === 'disabled') echo ' class="icon-disabled"'; ?>>
+<body<?php if ($iconType === 'disabled') echo ' class="icon-disabled"'; ?>>
     <div class="container">
         <div class="header">
-            <!-- CHANGE: Updated header to reflect files/ structure -->
             <h1>Index of <?php echo htmlspecialchars($webCurrentPath); ?></h1>
             <div class="breadcrumbs"><?php echo getBreadcrumbs($currentPath); ?></div>
         </div>
@@ -1439,6 +1768,7 @@ function getBreadcrumbs($currentPath) {
                                 <a href="<?php 
                                     $closeParams = $_GET;
                                     unset($closeParams['options']);
+                                    unset($closeParams['action']);
                                     echo $_SERVER['SCRIPT_NAME'] . ($closeParams ? '?' . http_build_query($closeParams) : '');
                                 ?>" class="options-toggle">×</a>
                                 <div class="options-dropdown">
@@ -1467,7 +1797,9 @@ function getBreadcrumbs($currentPath) {
                                 </div>
                             <?php else: ?>
                                 <?php
-                                $optionsParams = array_merge($_GET, ['options' => '1']);
+                                $optionsParams = $_GET;
+                                unset($optionsParams['action']);
+                                $optionsParams['options'] = '1';
                                 ?>
                                 <a href="<?php echo $_SERVER['SCRIPT_NAME'] . '?' . http_build_query($optionsParams); ?>" class="options-toggle">⋯</a>
                             <?php endif; ?>
@@ -1495,7 +1827,7 @@ function getBreadcrumbs($currentPath) {
                     </div>
                     <div class="file-size">-</div>
                     <div class="file-date">-</div>
-                    <div style="width: 65px;"></div>
+                    <div class="item-actions-menu-container"></div>
                 </div>
             </div>
             <?php endif; ?>
@@ -1519,13 +1851,9 @@ function getBreadcrumbs($currentPath) {
                     </div>
                     <div class="file-size"><?php echo formatBytes($dir['size']); ?></div>
                     <div class="file-date"><?php echo date('Y-m-d H:i', $dir['modified']); ?></div>
-                    <?php if (!$disableFolderDownloads): ?>
-                    <a href="?<?php echo http_build_query(['path' => $currentPath, 'download' => '1', 'file' => $dir['name']]); ?>" class="download-btn">
-                        ZIP
-                    </a>
-                    <?php else: ?>
-                    <div style="width: 65px;"></div>
-                    <?php endif; ?>
+                    <div class="item-actions-menu-container">
+                        <?php echo getFolderActionMenu($dir, $currentPath); ?>
+                    </div>
                 </div>
             </div>
             <?php endforeach; ?>
@@ -1549,17 +1877,20 @@ function getBreadcrumbs($currentPath) {
                     </div>
                     <div class="file-size"><?php echo formatBytes($file['size']); ?></div>
                     <div class="file-date"><?php echo date('Y-m-d H:i', $file['modified']); ?></div>
-                    <?php if (!$disableFileDownloads): ?>
-                    <a href="?<?php echo http_build_query(['path' => $currentPath, 'download' => '1', 'file' => $file['name']]); ?>" class="download-btn">
-                        DL
-                    </a>
-                    <?php else: ?>
-                    <div style="width: 65px;"></div>
-                    <?php endif; ?>
+                    <div class="item-actions-menu-container">
+                        <?php echo getFileActionMenu($file, $currentPath); ?>
+                    </div>
                 </div>
             </div>
             <?php endforeach; ?>
         </div>
     </div>
+    <?php
+    if (isset($_GET['share_popup']) && isset($_GET['share_file'])) {
+        $shareType = $_GET['share_popup'];
+        $shareFile = $_GET['share_file'];
+        echo generateSharePopup($shareType, $shareFile, $currentPath);
+    }
+    ?>
 </body>
 </html>

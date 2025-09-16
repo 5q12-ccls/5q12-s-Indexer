@@ -1,0 +1,15 @@
+services:
+  5q12-indexer:
+    image: 5q12/5q12-indexer:latest
+    container_name: 5q12-indexer
+    restart: unless-stopped
+    ports:
+      - "5012:5012"  # Access the indexer on port 5012
+    environment:
+      - TZ=Etc/UTC   # Set your timezone (optional)
+    volumes:
+      # Configuration directory - stores settings and cache
+      - /example_host_path/config:/config
+      
+      # Files directory - mount your content here to index
+      - /example_host_path/files:/files
