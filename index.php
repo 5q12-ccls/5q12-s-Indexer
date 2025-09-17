@@ -564,7 +564,7 @@ function checkAndUpdateConfig() {
     if ($disableApi) {
         return false;
     }
-    $localVersion = isset($config['version']) ? $config['version'] : '1.1.13';
+    $localVersion = isset($config['version']) ? $config['version'] : '1.1.14';
     try {
         $cacheKey = 'version_check_' . $localVersion;
         if ($cacheInstance !== null) {
@@ -604,7 +604,7 @@ function checkAndUpdateConfig() {
             return false;
         }
         $latestConfig = $latestConfigData['config'];
-        $latestVersion = isset($latestConfig['version']) ? $latestConfig['version'] : '1.1.13';
+        $latestVersion = isset($latestConfig['version']) ? $latestConfig['version'] : '1.1.14';
         if ($localVersion === $latestVersion) {
             if ($cacheInstance !== null) {
                 $cacheInstance->set($cacheKey, 'version', false, 3600);
@@ -645,8 +645,8 @@ function mergeConfigUpdates($localConfig, $latestConfig) {
         $changes = [];
         $updated = false;
         $mergedConfig = $localConfig;
-        $oldVersion = isset($localConfig['version']) ? $localConfig['version'] : '1.1.13';
-        $newVersion = isset($latestConfig['version']) ? $latestConfig['version'] : '1.1.13';
+        $oldVersion = isset($localConfig['version']) ? $localConfig['version'] : '1.1.14';
+        $newVersion = isset($latestConfig['version']) ? $latestConfig['version'] : '1.1.14';
         $mergedConfig['version'] = $newVersion;
         $changes[] = "Updated version from {$oldVersion} to {$newVersion}";
         $updated = true;
@@ -1382,10 +1382,7 @@ if (isset($_GET['download']) && isset($_GET['file'])) {
             header('Location: ' . $_SERVER['SCRIPT_NAME']);
             exit;
         }
-        header('Content-Type: application/octet-stream');
-        header('Content-Disposition: attachment; filename="' . basename($downloadFile) . '"');
-        header('Content-Length: ' . filesize($downloadPath));
-        readfile($downloadPath);
+        serveFileWithXAccel($downloadPath, $downloadFile);
         exit;
     } elseif (is_dir($downloadPath)) {
         if ($disableFolderDownloads) {
@@ -1435,6 +1432,75 @@ if (isset($_GET['download']) && isset($_GET['file'])) {
     http_response_code(404);
     header('Location: ' . $_SERVER['SCRIPT_NAME']);
     exit;
+}
+function serveFileWithXAccel($filePath, $fileName) {
+    global $baseDir;
+    $useXAccel = isset($_SERVER['SERVER_SOFTWARE']) && 
+                 strpos($_SERVER['SERVER_SOFTWARE'], 'nginx') !== false;
+    if ($useXAccel) {
+        $relativePath = str_replace($baseDir, '', $filePath);
+        $internalPath = '/internal-files' . $relativePath;
+        header('Content-Type: application/octet-stream');
+        header('Content-Disposition: attachment; filename="' . basename($fileName) . '"');
+        header('Content-Length: ' . filesize($filePath));
+        header('Accept-Ranges: bytes');
+        header('X-Accel-Redirect: ' . $internalPath);
+        header('X-Accel-Buffering: no');
+        if (ob_get_level()) {
+            ob_end_clean();
+        }
+        exit;
+    } else {
+        serveFileWithPHPStream($filePath, $fileName);
+    }
+}
+function serveFileWithPHPStream($filePath, $fileName) {
+    $fileSize = filesize($filePath);
+    $start = 0;
+    $end = $fileSize - 1;
+    if (isset($_SERVER['HTTP_RANGE'])) {
+        $range = $_SERVER['HTTP_RANGE'];
+        if (preg_match('/bytes=(\d+)-(\d*)/', $range, $matches)) {
+            $start = intval($matches[1]);
+            if (!empty($matches[2])) {
+                $end = intval($matches[2]);
+            }
+        }
+        http_response_code(206);
+        header('Content-Range: bytes ' . $start . '-' . $end . '/' . $fileSize);
+    } else {
+        http_response_code(200);
+    }
+    header('Content-Type: application/octet-stream');
+    header('Content-Disposition: attachment; filename="' . basename($fileName) . '"');
+    header('Content-Length: ' . ($end - $start + 1));
+    header('Accept-Ranges: bytes');
+    header('Cache-Control: no-cache');
+    if (ob_get_level()) {
+        ob_end_clean();
+    }
+    $handle = fopen($filePath, 'rb');
+    if ($handle === false) {
+        http_response_code(500);
+        exit;
+    }
+    fseek($handle, $start);
+    $bytesToRead = $end - $start + 1;
+    $chunkSize = 8192;
+    while ($bytesToRead > 0 && !feof($handle)) {
+        $currentChunk = min($chunkSize, $bytesToRead);
+        $data = fread($handle, $currentChunk);
+        if ($data === false) {
+            break;
+        }
+        echo $data;
+        flush();
+        $bytesToRead -= strlen($data);
+        if (connection_aborted()) {
+            break;
+        }
+    }
+    fclose($handle);
 }
 function addDirectoryToZip($zip, $dir, $zipPath = '') {
     $files = scandir($dir);
