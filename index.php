@@ -511,6 +511,20 @@ function getFolderActionMenu($folder, $currentPath) {
     return $menu;
 }
 function getAbsoluteUrl($relativeUrl) {
+    global $config;
+    if (isset($config['main']['access_url']) && !empty($config['main']['access_url'])) {
+        $baseUrl = rtrim($config['main']['access_url'], '/');
+        if (strpos($relativeUrl, '/') === 0) {
+            return $baseUrl . $relativeUrl;
+        } else {
+            $currentDir = dirname($_SERVER['REQUEST_URI']);
+            if ($currentDir === '/' || $currentDir === '\\') {
+                return $baseUrl . '/' . $relativeUrl;
+            } else {
+                return $baseUrl . rtrim($currentDir, '/') . '/' . $relativeUrl;
+            }
+        }
+    }
     $protocol = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http';
     $host = $_SERVER['HTTP_HOST'];
     if (strpos($relativeUrl, '/') === 0) {
@@ -564,7 +578,7 @@ function checkAndUpdateConfig() {
     if ($disableApi) {
         return false;
     }
-    $localVersion = isset($config['version']) ? $config['version'] : '1.1.14';
+    $localVersion = isset($config['version']) ? $config['version'] : '1.1.15';
     try {
         $cacheKey = 'version_check_' . $localVersion;
         if ($cacheInstance !== null) {
@@ -604,7 +618,7 @@ function checkAndUpdateConfig() {
             return false;
         }
         $latestConfig = $latestConfigData['config'];
-        $latestVersion = isset($latestConfig['version']) ? $latestConfig['version'] : '1.1.14';
+        $latestVersion = isset($latestConfig['version']) ? $latestConfig['version'] : '1.1.15';
         if ($localVersion === $latestVersion) {
             if ($cacheInstance !== null) {
                 $cacheInstance->set($cacheKey, 'version', false, 3600);
@@ -645,8 +659,8 @@ function mergeConfigUpdates($localConfig, $latestConfig) {
         $changes = [];
         $updated = false;
         $mergedConfig = $localConfig;
-        $oldVersion = isset($localConfig['version']) ? $localConfig['version'] : '1.1.14';
-        $newVersion = isset($latestConfig['version']) ? $latestConfig['version'] : '1.1.14';
+        $oldVersion = isset($localConfig['version']) ? $localConfig['version'] : '1.1.15';
+        $newVersion = isset($latestConfig['version']) ? $latestConfig['version'] : '1.1.15';
         $mergedConfig['version'] = $newVersion;
         $changes[] = "Updated version from {$oldVersion} to {$newVersion}";
         $updated = true;
@@ -714,6 +728,7 @@ function ensureLocalResources() {
     if (!is_dir($iconsDir)) {
         mkdir($iconsDir, 0755, true);
     }
+    ensureLocalFavicons();
     if (!file_exists($localExtensionMapFile)) {
         $extensionMapUrl = $apiBaseUrl . '/extensionMap.json';
         $extensionMapData = @file_get_contents($extensionMapUrl);
@@ -1637,6 +1652,55 @@ function getSortIndicator($column, $currentSort, $currentDir) {
     }
     return $currentDir === 'asc' ? ' ↑' : ' ↓';
 }
+function ensureLocalFavicons() {
+    global $apiBaseUrl, $indexerFilesDir;
+    $faviconDir = $iconsDir;
+    $faviconFiles = [
+        'icon.ico',
+        '16x16.png',
+        '32x32.png', 
+        '48x48.png',
+        '96x96.png',
+        '144x144.png',
+        '192x192.png',
+        '180x180.png'
+    ];
+    foreach ($faviconFiles as $faviconFile) {
+        $localFaviconPath = $faviconDir . '/' . $faviconFile;
+        if (!file_exists($localFaviconPath)) {
+            $faviconUrl = $apiBaseUrl . '/favicon/' . $faviconFile;
+            $faviconData = @file_get_contents($faviconUrl);
+            if ($faviconData !== false) {
+                @file_put_contents($localFaviconPath, $faviconData);
+            }
+        }
+    }
+}
+function getFaviconUrl($faviconFile) {
+    global $webPath, $disableApi, $indexerFilesDir, $apiBaseUrl, $scriptDir;
+    if ($disableApi) {
+        $faviconPath = $indexerFilesDir . '/icons/' . $faviconFile;
+        if (file_exists($faviconPath)) {
+            $relativePath = str_replace($scriptDir, '', $faviconPath);
+            return $webPath . $relativePath;
+        }
+        return $apiBaseUrl . '/favicon/' . $faviconFile;
+    } else {
+        return $apiBaseUrl . '/favicon/' . $faviconFile;
+    }
+}
+function getFaviconTags() {
+    $faviconTags = [];
+    $faviconTags[] = '<link rel="icon" type="image/x-icon" href="' . getFaviconUrl('icon.ico') . '">';
+    $faviconTags[] = '<link rel="icon" type="image/png" sizes="16x16" href="' . getFaviconUrl('16x16.png') . '">';
+    $faviconTags[] = '<link rel="icon" type="image/png" sizes="32x32" href="' . getFaviconUrl('32x32.png') . '">';
+    $faviconTags[] = '<link rel="icon" type="image/png" sizes="48x48" href="' . getFaviconUrl('48x48.png') . '">';
+    $faviconTags[] = '<link rel="icon" type="image/png" sizes="96x96" href="' . getFaviconUrl('96x96.png') . '">';
+    $faviconTags[] = '<link rel="icon" type="image/png" sizes="144x144" href="' . getFaviconUrl('144x144.png') . '">';
+    $faviconTags[] = '<link rel="icon" type="image/png" sizes="192x192" href="' . getFaviconUrl('192x192.png') . '">';
+    $faviconTags[] = '<link rel="apple-touch-icon" sizes="180x180" href="' . getFaviconUrl('180x180.png') . '">';
+    return implode("\n    ", $faviconTags);
+}
 if (isset($_GET['view']) && $_GET['view'] === 'raw' && isset($_GET['file'])) {
     $viewFile = $_GET['file'];
     $viewPath = $fullPath . '/' . $viewFile;
@@ -1792,6 +1856,7 @@ function getBreadcrumbs($currentPath) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Index of <?php echo htmlspecialchars($webCurrentPath); ?></title>
+    <?php echo getFaviconTags(); ?>
     <link rel="stylesheet" href="<?php echo getStylesheetUrl(); ?>">
 </head>
 <body<?php if ($iconType === 'disabled') echo ' class="icon-disabled"'; ?>>

@@ -1,8 +1,8 @@
 5q12's Indexer - Configuration Reference
 ==========================================
 
-Version: [1.1.14]
-Updated: 2025-09-17
+Version: [1.1.15]
+Updated: 2025-09-18
 
 CONFIGURATION STRUCTURE
 =======================
@@ -66,6 +66,18 @@ Default: false
 Purpose: Disable all external API communication
 Effect: Forces offline mode, downloads all resources locally
 Use Case: Air-gapped environments, security compliance
+
+Access URL
+----------
+Property: main.access_url
+Type: String
+Default: ""
+Purpose: Override automatic URL detection for share links
+Use Case: Reverse proxy configurations, custom domains
+Effect: When set, all share URLs use this base URL instead of auto-detected values
+Format: Full URL with protocol (e.g., "https://file.example.com:8443")
+Example: "https://file.example.com:8443"
+Note: Leave empty ("") for automatic detection
 
 Download Controls
 -----------------
@@ -278,6 +290,14 @@ Media Server
   }
 }
 
+Reverse Proxy Setup
+--------------------
+{
+  "main": {
+    "access_url": "https://file.example.com:8443"
+  }
+}
+
 PRIORITY RULES
 ==============
 
@@ -297,6 +317,10 @@ File Processing Order:
 5. Hidden file filtering
 6. Final display decision
 
+URL Generation Priority:
+1. Custom access_url (when configured)
+2. Automatic detection from HTTP headers
+
 PERFORMANCE CONSIDERATIONS
 ===========================
 
@@ -315,6 +339,11 @@ API Disable:
 - Requires manual updates
 - Downloads all resources locally
 
+Access URL:
+- No performance impact
+- Prevents incorrect share URLs in reverse proxy setups
+- Essential for proper functionality behind load balancers
+
 VALIDATION RULES
 =================
 
@@ -323,6 +352,7 @@ Boolean Values: Use true/false, not strings
 String Lists: Comma-separated, no trailing commas
 Version Format: Semantic versioning (major.minor)
 Extension Keys: Must match predefined mappings
+Access URL Format: Must include protocol (http:// or https://)
 
 UPDATE BEHAVIOR
 ===============
@@ -345,6 +375,8 @@ Config Not Applied: Check JSON syntax, clear cache
 Performance Issues: Enable SQLite caching
 Security Concerns: Review deny_list and sensitive file settings
 Display Problems: Verify extension mappings and browser compatibility
+Incorrect Share URLs: Set access_url for reverse proxy configurations
+Share Links Not Working: Verify access_url includes protocol and port
 
 FILE EXTENSIONS SUPPORTED
 ==========================
@@ -382,3 +414,7 @@ Backup configuration:
 
 Clear cache:
   rm -rf .indexer_files/index_cache/*
+
+Set reverse proxy URL:
+  # Edit config.json and set:
+  "access_url": "https://your-domain.com:port"
