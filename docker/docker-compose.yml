@@ -1,0 +1,15 @@
+services:
+  5q12-indexer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: 5q12-indexer
+    restart: unless-stopped
+    ports:
+      - "5012:5012"
+    environment:
+      - TZ=Etc/UTC
+    volumes:
+      # Simple mount points - contents go directly into host directories
+      - /projects/test/config:/config
+      - /projects/test/files:/files:ro
