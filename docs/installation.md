@@ -74,15 +74,7 @@ Access at: `http://localhost:5012`
 - sudo privileges
 - Internet connection for package downloads
 
-## Important Changes
-
-**No External Dependencies:**
-- No API connectivity required
-- No automatic configuration downloads
-- Fully offline operation
-- Manual configuration required
-
-**Repository Changes:**
+**Repository:**
 - New repository location: https://ccls.icu/src/repositories/5q12-indexer/
 - Download: https://ccls.icu/src/repositories/5q12-indexer/main/?download=archive
 
@@ -91,7 +83,6 @@ Access at: `http://localhost:5012`
 After installation with any method:
 
 1. **Access the indexer** via your web browser
-2. **Create configuration** in `.indexer_files/config.json` (see Configuration Guide)
 3. **Add content** to the files directory
 4. **Review security settings** for production use
 

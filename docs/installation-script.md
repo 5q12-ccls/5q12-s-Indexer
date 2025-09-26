@@ -6,6 +6,7 @@ The automated installation script is the easiest way to install 5q12's Indexer. 
 
 ### Features
 - **Automatic dependency installation** - Installs Nginx, PHP, and required extensions
+- **Automatic configuration updates** - Automaticly adds missing fields to config.json
 - **Conflict resolution** - Stops and disables conflicting web servers (Apache2, Lighttpd)
 - **Nginx configuration** - Creates optimized configuration for the indexer
 - **PHP optimization** - Installs and configures PHP-FPM with required extensions
@@ -36,7 +37,7 @@ The automated installation script is the easiest way to install 5q12's Indexer. 
 
 ```bash
 # Download the installation script
-wget https://ccls.icu/src/repositories/5q12-indexer/main/install.sh
+wget https://ccls.icu/src/test/5q12-indexer/main/install.sh/ -O install.sh
 
 # Make it executable
 chmod +x install.sh
@@ -105,15 +106,6 @@ sudo 5q12-index install /path/to/directory
 sudo 5q12-index update
 ```
 
-### Configuration Management
-```bash
-# Create default configuration
-sudo 5q12-index create-config /path/to/installation
-
-# Validate configuration
-5q12-index validate-config /path/to/installation
-```
-
 ### Help
 ```bash
 # Show help information
@@ -143,7 +135,7 @@ sudo 5q12-index create-config /path/to/installation
 
 4. **Indexer Setup**
    - Downloads latest index.php from repository
-   - Creates basic configuration file
+   - Downloads all ".indexer_files" files
    - Sets proper ownership (www-data)
    - Initializes cache directories
    - Creates management symlinks
@@ -239,10 +231,6 @@ sudo 5q12-index create-config /path/to/installation
 - Update package lists: `sudo apt update`
 - Check internet connection
 - Verify distribution compatibility
-
-**"Configuration file not found"**
-- Run: `sudo 5q12-index create-config /path/to/installation`
-- Check file permissions: `ls -la .indexer_files/config.json`
 
 ## Manual Cleanup
 

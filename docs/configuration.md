@@ -76,25 +76,16 @@
 
 | Option | Description | Use Case |
 |--------|-------------|----------|
-| `default` | Full local icon library with type-specific icons | Standard usage, visual file identification |
+| `default` | Full icon library with type-specific icons | Standard usage, visual file identification |
 | `minimal` | Generic file/folder icons only | Bandwidth-limited environments |
 | `emoji` | Unicode emoji icons (📄/📁) | No external resources, universal compatibility |
 | `disabled` | No icons displayed | Text-only interfaces, accessibility |
 
 **Icon behavior:**
-- `default` - Uses local icon library (`.indexer_files/icons/`)
+- `default` - Uses full icon library (`.indexer_files/icons/`)
 - `minimal` - Shows only `folder.png` and `non-descript-default-file.png`
 - `emoji` - Uses Unicode file (📄) and folder (📁) symbols
 - `disabled` - Removes icon column entirely, adjusts layout
-
-#### Local Icons (Always True)
-```json
-{
-  "main": {
-    "local_icons": true  // Always true - no external API
-  }
-}
-```
 
 All icons are stored and served locally from `.indexer_files/icons/`
 
@@ -104,8 +95,8 @@ All icons are stored and served locally from `.indexer_files/icons/`
 ```json
 {
   "main": {
-    "disable_file_downloads": true,  // Removes "DL" buttons
-    "disable_folder_downloads": true // Removes "ZIP" buttons
+    "disable_file_downloads": true,  // Removes the Download options from file action menus
+    "disable_folder_downloads": true // Removes the Download options from folder action menus
   }
 }
 ```
@@ -142,7 +133,6 @@ All icons are stored and served locally from `.indexer_files/icons/`
 ```
 
 **When enabled, shows:**
-- The indexer's own `.indexer_files/` directory
 - All security-sensitive files
 - All file types regardless of other settings
 
@@ -283,11 +273,10 @@ Force inclusion, overriding other exclusions.
 ### High-Security Environment
 ```json
 {
-  "version": "1.0",
   "main": {
+    "access_url": "https://example.net",
     "cache_type": "sqlite",
     "icon_type": "minimal",
-    "local_icons": true,
     "disable_file_downloads": true,
     "disable_folder_downloads": true,
     "index_hidden": false,
@@ -308,11 +297,11 @@ Force inclusion, overriding other exclusions.
 ### Development Environment
 ```json
 {
-  "version": "1.0",
   "main": {
     "cache_type": "sqlite",
     "icon_type": "default",
     "index_hidden": true,
+    "index_all": true,
     "allow_list": "src*, docs*, config/dev.json"
   },
   "exclusions": {
@@ -331,11 +320,9 @@ Force inclusion, overriding other exclusions.
 ### Public File Server
 ```json
 {
-  "version": "1.0",
   "main": {
     "cache_type": "sqlite",
     "icon_type": "emoji",
-    "local_icons": true,
     "deny_list": "admin, private, .htaccess, config"
   },
   "exclusions": {
@@ -354,7 +341,6 @@ Force inclusion, overriding other exclusions.
 ### Media Server
 ```json
 {
-  "version": "1.0",
   "main": {
     "cache_type": "sqlite",
     "icon_type": "default",
@@ -376,99 +362,6 @@ Force inclusion, overriding other exclusions.
     "view_pdf": true
   }
 }
-```
-
-## Management & Updates
-
-### Manual Configuration Only
-
-**All configuration is now manual:**
-- No automatic updates from external sources
-- No version checking or downloads
-- Complete offline operation
-- User maintains full control
-
-**Configuration process:**
-1. Create `.indexer_files/config.json` manually
-2. Add desired settings based on examples above
-3. Restart web server if needed
-4. Changes take effect immediately
-
-### Configuration Creation
-
-**Create minimal working configuration:**
-
-```bash
-# Create configuration directory
-mkdir -p .indexer_files
-
-# Create basic configuration
-cat > .indexer_files/config.json << 'EOF'
-{
-  "version": "1.0",
-  "main": {
-    "cache_type": "sqlite",
-    "local_icons": true,
-    "disable_file_downloads": false,
-    "disable_folder_downloads": false,
-    "index_hidden": false,
-    "deny_list": "",
-    "allow_list": ""
-  },
-  "exclusions": {
-    "index_folders": true,
-    "index_txt": true,
-    "index_php": true,
-    "index_js": true,
-    "index_css": true,
-    "index_html": true,
-    "index_json": true,
-    "index_xml": true,
-    "index_md": true,
-    "index_png": true,
-    "index_jpg": true,
-    "index_gif": true,
-    "index_pdf": true,
-    "index_mp4": true,
-    "index_mp3": true,
-    "index_zip": true
-  },
-  "viewable_files": {
-    "view_txt": true,
-    "view_php": true,
-    "view_js": true,
-    "view_css": true,
-    "view_html": true,
-    "view_json": true,
-    "view_xml": true,
-    "view_md": true,
-    "view_png": true,
-    "view_jpg": true,
-    "view_gif": true,
-    "view_pdf": true,
-    "view_mp4": true,
-    "view_mp3": true
-  }
-}
-EOF
-
-# Set proper permissions
-chmod 644 .indexer_files/config.json
-```
-
-### Backup and Recovery
-
-**Manual backup procedures:**
-
-```bash
-# Create backup before changes
-cp .indexer_files/config.json .indexer_files/config.json.backup.$(date +%Y%m%d_%H%M%S)
-
-# Verify backup integrity
-cat .indexer_files/config.json | python -m json.tool > /dev/null && echo "Configuration valid"
-
-# Restore from backup
-cp .indexer_files/config.json.backup.20250924_150000 .indexer_files/config.json
 ```
 
 ### Troubleshooting Configuration

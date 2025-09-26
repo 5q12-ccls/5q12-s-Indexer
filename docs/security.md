@@ -103,8 +103,6 @@ if (strpos($downloadPath, '../') !== false || strpos($downloadPath, './') !== fa
 {
   "main": {
     "cache_type": "sqlite",
-    "local_icons": true,
-    "disable_api": true,
     "disable_file_downloads": true,
     "disable_folder_downloads": true,
     "index_hidden": false,

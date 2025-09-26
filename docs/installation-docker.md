@@ -34,7 +34,7 @@ Download Docker Desktop from [docker.com](https://www.docker.com/products/docker
 
 ### Step 1: Create Docker Compose Configuration
 
-Create a `docker-compose.yml` file:
+Create a `docker compose.yml` file:
 
 ```yaml
 services:
@@ -69,10 +69,10 @@ chmod -R 755 /your/host/files
 
 ```bash
 # Start the indexer
-docker-compose up -d
+docker compose up -d
 
 # Check status
-docker-compose logs -f 5q12-indexer
+docker compose logs -f 5q12-indexer
 ```
 
 ### Step 4: Access the Indexer
@@ -158,7 +158,6 @@ services:
 **Configuration Volume (`/config`):**
 - Stores `config.json` settings
 - Cache files for performance
-- Local icons (if enabled)
 - Log files and backups
 
 **Files Volume (`/files`):**
@@ -209,20 +208,20 @@ ports:
 ### Container Management
 ```bash
 # Start containers
-docker-compose up -d
+docker compose up -d
 
 # Stop containers
-docker-compose down
+docker compose down
 
 # Restart containers
-docker-compose restart
+docker compose restart
 
 # View logs
-docker-compose logs -f
+docker compose logs -f
 
 # Update to latest image
-docker-compose pull
-docker-compose up -d
+docker compose pull
+docker compose up -d
 ```
 
 ### Maintenance
@@ -245,10 +244,10 @@ docker image prune
 ### Updating
 ```bash
 # Pull latest image
-docker-compose pull 5q12/5q12-indexer:latest
+docker compose pull 5q12/5q12-indexer:latest
 
 # Recreate container with new image
-docker-compose up -d
+docker compose up -d
 
 # Clean up old images
 docker image prune
@@ -259,8 +258,8 @@ docker image prune
 # Backup config directory
 tar -czf indexer-config-$(date +%Y%m%d).tar.gz /path/to/config
 
-# Backup docker-compose configuration
-cp docker-compose.yml docker-compose.yml.backup
+# Backup docker compose configuration
+cp docker compose.yml docker compose.yml.backup
 ```
 
 ### Version Pinning
@@ -308,7 +307,7 @@ services:
 ### Container Won't Start
 ```bash
 # Check logs for errors
-docker-compose logs 5q12-indexer
+docker compose logs 5q12-indexer
 
 # Check if ports are available
 netstat -tlnp | grep :5012

@@ -70,52 +70,19 @@ php -m | grep -E "(sqlite|zip|json|curl)"
 <?php phpinfo(); ?>
 ```
 
-## Installation Methods
+## Installation
 
-### Method 1: Single File Deployment (Recommended)
+### Method 1: CCLS repository
 
-**Best for:** Simple setups, shared hosting, quick deployment
+```bash
+# Download indexer repository
+wget https://ccls.icu/src/repositories/5q12-indexer/main/?download=archive -O 5q12-indexer.zip
 
-1. Download `index.php`
-2. Upload to desired directory
-3. Access via web browser
-4. Automatic configuration download
+# Move to desired location
+sudo mv main/* main/.* /var/www/html/ 2>/dev/null
+```
 
-**Pros:**
-- Simplest installation
-- Automatic updates
-- No manual configuration needed
-
-**Cons:**
-- Requires internet connection for initial setup
-- API dependency for updates
-
-### Method 2: Offline Installation
-
-**Best for:** Air-gapped networks, high-security environments
-
-1. Download complete package including:
-   - `index.php`
-   - `config.json`
-   - `extensionMap.json`
-   - `icons.json`
-   - Icon files
-   - CSS files
-
-2. Set `"disable_api": true` in configuration
-
-**Pros:**
-- No internet dependency
-- Full offline operation
-- Enhanced security
-
-**Cons:**
-- Manual updates required
-- Larger initial download
-
-### Method 3: Development Setup
-
-**Best for:** Customization, development, testing
+### Method 2: GitHub
 
 ```bash
 # Clone repository
@@ -123,10 +90,7 @@ git clone https://github.com/5q12-ccls/5q12-s-Indexer.git
 cd repo
 
 # Copy to web directory
-cp index.php /var/www/html/dev/
-
-# Set development configuration
-echo '{"main":{"disable_api":true,"index_hidden":true}}' > .indexer_files/config.json
+cp repo/ /var/www/html/dev/
 ```
 
 ## Web Server Configuration
@@ -220,34 +184,7 @@ server {
 </configuration>
 ```
 
-## Initial Setup
-
-### Automatic Setup (Default)
-
-When you first access the indexer:
-
-1. **Directory Creation**
-   ```
-   .indexer_files/
-   ├── config.json
-   ├── zip_cache/
-   ├── index_cache/
-   ├── icons/ (if local_icons enabled)
-   └── local_api/ (if disable_api enabled)
-   ```
-
-2. **Configuration Download**
-   - Latest configuration from API
-   - Extension mappings
-   - Icon mappings
-
-3. **Cache Initialization**
-   - SQLite database creation (if supported)
-   - Initial directory scanning
-
 ### Manual Setup
-
-If automatic setup fails:
 
 ```bash
 # Create directory structure
@@ -391,7 +328,6 @@ opcache.max_accelerated_files = 4000
 {
   "main": {
     "cache_type": "sqlite",
-    "local_icons": true
   }
 }
 ```
