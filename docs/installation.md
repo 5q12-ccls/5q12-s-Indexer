@@ -39,6 +39,7 @@ Step-by-step manual installation with full control over the process.
 - ✅ Works on any Linux distribution
 - ✅ Educational value
 - ⚠️ Requires manual dependency management
+- ⚠️ Requires manual configuration creation
 
 **[→ Manual Installation Guide](installation-manual.md)**
 
@@ -73,12 +74,24 @@ Access at: `http://localhost:5012`
 - sudo privileges
 - Internet connection for package downloads
 
+## Important Changes
+
+**No External Dependencies:**
+- No API connectivity required
+- No automatic configuration downloads
+- Fully offline operation
+- Manual configuration required
+
+**Repository Changes:**
+- New repository location: https://ccls.icu/src/repositories/5q12-indexer/
+- Download: https://ccls.icu/src/repositories/5q12-indexer/main/?download=archive
+
 ## Post-Installation
 
 After installation with any method:
 
 1. **Access the indexer** via your web browser
-2. **Configure settings** in `.indexer_files/config.json` (auto-created)
+2. **Create configuration** in `.indexer_files/config.json` (see Configuration Guide)
 3. **Add content** to the files directory
 4. **Review security settings** for production use
 
@@ -93,4 +106,4 @@ If you encounter issues with any installation method:
 
 ---
 
-**Next Steps:** After installation, see the [Configuration Guide](configuration.md) to customize your indexer settings.
+**Next Steps:** After installation, see the [Configuration Guide](configuration.md) to create your indexer settings.

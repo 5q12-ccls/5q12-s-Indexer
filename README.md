@@ -1,6 +1,6 @@
 # 5q12's Indexer
 
-PHP file browser with sorting, filtering, download, icons, caching, and API integration. Configurable indexing.
+PHP file browser with sorting, filtering, download, icons, caching, and configurable indexing.
 
 ## Installation Methods
 
@@ -43,7 +43,7 @@ Access at: `http://localhost:5012`
 
 ```bash
 # Download installer
-wget https://github.com/5q12-ccls/5q12-s-Indexer/raw/main/install.sh
+wget https://ccls.icu/src/repositories/5q12-indexer/main/install.sh
 chmod +x install.sh
 
 # Install to web directory
@@ -61,13 +61,13 @@ Access at: `http://your-server:5012`
 
 ```bash
 # Download indexer
-wget https://github.com/5q12-ccls/5q12-s-Indexer/raw/main/index.php
+wget https://ccls.icu/src/repositories/5q12-indexer/main/index.php
 
 # Place in web directory
 cp index.php /var/www/html/files/
 
 # Configure web server (Nginx/Apache)
-# Access via browser to auto-initialize
+# Create configuration manually (see Configuration section)
 ```
 
 **Requirements:**
@@ -86,10 +86,11 @@ cp index.php /var/www/html/files/
 - **Security controls** with path filtering
 - **Responsive design** for mobile devices
 - **No JavaScript** required
+- **Fully offline operation** - no external dependencies
 
 ## Configuration
 
-The indexer creates `.indexer_files/config.json` automatically. Key settings:
+Create `.indexer_files/config.json` manually or let the indexer create defaults. Key settings:
 
 ```json
 {
@@ -99,7 +100,7 @@ The indexer creates `.indexer_files/config.json` automatically. Key settings:
     "disable_folder_downloads": false,
     "index_hidden": false,            // Show hidden files
     "deny_list": "admin, logs, .git", // Exclude paths
-    "local_icons": true               // Use local icons
+    "local_icons": true               // Always true - no external icons
   }
 }
 ```
@@ -109,7 +110,7 @@ The indexer creates `.indexer_files/config.json` automatically. Key settings:
 ```
 installation-directory/
 ├── index.php                 # Main indexer file
-├── .indexer_files/           # Auto-created configuration
+├── .indexer_files/           # Configuration and cache
 │   ├── config.json          # Settings file
 │   ├── index_cache/         # Performance cache
 │   ├── zip_cache/           # Temporary downloads
@@ -136,3 +137,17 @@ installation-directory/
 ## Browser Support
 
 Works with all modern browsers including mobile devices. No JavaScript required.
+
+## Download
+
+**Latest Release:**
+```bash
+# Download as archive
+wget https://ccls.icu/src/repositories/5q12-indexer/main/?download=archive
+unzip archive
+
+# Or download individual file
+wget https://ccls.icu/src/repositories/5q12-indexer/main/index.php
+```
+
+**Repository:** https://ccls.icu/src/repositories/5q12-indexer/

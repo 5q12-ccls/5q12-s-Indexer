@@ -11,7 +11,7 @@
 
 ## Overview
 
-5q12's Indexer uses a JSON-based configuration system that controls all aspects of behavior, from file display to system performance. The configuration file is located at `.indexer_files/config.json`.
+5q12's Indexer uses a JSON-based configuration system that controls all aspects of behavior, from file display to system performance. The configuration file is located at `.indexer_files/config.json` and must be created manually.
 
 ### Quick Configuration
 
@@ -25,9 +25,9 @@
 {"main": {"disable_file_downloads": true, "disable_folder_downloads": true}}
 ```
 
-**Go offline:**
+**Show hidden files:**
 ```json
-{"main": {"disable_api": true, "local_icons": true}}
+{"main": {"index_hidden": true}}
 ```
 
 ## Configuration File Structure
@@ -74,52 +74,29 @@
 }
 ```
 
-| Option | Description | Bandwidth | Use Case |
-|--------|-------------|-----------|----------|
-| `default` | Full icon library with type-specific icons | High | Standard usage, visual file identification |
-| `minimal` | Generic file/folder icons only | Low | Bandwidth-limited environments |
-| `emoji` | Unicode emoji icons (📄/📁) | Minimal | No external resources, universal compatibility |
-| `disabled` | No icons displayed | None | Text-only interfaces, accessibility |
+| Option | Description | Use Case |
+|--------|-------------|----------|
+| `default` | Full local icon library with type-specific icons | Standard usage, visual file identification |
+| `minimal` | Generic file/folder icons only | Bandwidth-limited environments |
+| `emoji` | Unicode emoji icons (📄/📁) | No external resources, universal compatibility |
+| `disabled` | No icons displayed | Text-only interfaces, accessibility |
 
 **Icon behavior:**
-- `default` - Uses extensive icon library from API or local storage
+- `default` - Uses local icon library (`.indexer_files/icons/`)
 - `minimal` - Shows only `folder.png` and `non-descript-default-file.png`
 - `emoji` - Uses Unicode file (📄) and folder (📁) symbols
 - `disabled` - Removes icon column entirely, adjusts layout
 
-#### Local Icons
+#### Local Icons (Always True)
 ```json
 {
   "main": {
-    "local_icons": true  // true or false
+    "local_icons": true  // Always true - no external API
   }
 }
 ```
 
-**Benefits when enabled:**
-- Faster icon loading
-- Offline capability
-- Reduced API dependency
-- Better reliability
-
-**Note:** Only applies when `icon_type` is `"default"` or `"minimal"`
-
-### API Settings
-
-#### Disable API
-```json
-{
-  "main": {
-    "disable_api": true  // true or false
-  }
-}
-```
-
-**When enabled:**
-- Downloads all resources locally
-- Stops all external API calls
-- Enables air-gapped operation
-- Required for high-security environments
+All icons are stored and served locally from `.indexer_files/icons/`
 
 ### Download Controls
 
@@ -311,7 +288,6 @@ Force inclusion, overriding other exclusions.
     "cache_type": "sqlite",
     "icon_type": "minimal",
     "local_icons": true,
-    "disable_api": true,
     "disable_file_downloads": true,
     "disable_folder_downloads": true,
     "index_hidden": false,
@@ -404,75 +380,118 @@ Force inclusion, overriding other exclusions.
 
 ## Management & Updates
 
-### Automatic Updates
+### Manual Configuration Only
 
-**When enabled (`disable_api: false`):**
-- Checks for updates hourly
-- Downloads new configurations
-- Adds new file type support
-- Maintains user customizations
+**All configuration is now manual:**
+- No automatic updates from external sources
+- No version checking or downloads
+- Complete offline operation
+- User maintains full control
 
-**Update process:**
-1. Version comparison
-2. Configuration download
-3. Merge with existing settings
-4. Automatic backup creation
-5. Rollback on failure
+**Configuration process:**
+1. Create `.indexer_files/config.json` manually
+2. Add desired settings based on examples above
+3. Restart web server if needed
+4. Changes take effect immediately
 
-### Manual Configuration
+### Configuration Creation
 
-**Best practices:**
-1. **Always backup before changes:**
-   ```bash
-   cp .indexer_files/config.json .indexer_files/config.json.backup
-   ```
+**Create minimal working configuration:**
 
-2. **Validate JSON syntax:**
-   ```bash
-   php -r "json_decode(file_get_contents('.indexer_files/config.json')); echo 'Valid';"
-   ```
+```bash
+# Create configuration directory
+mkdir -p .indexer_files
 
-3. **Test changes incrementally**
-4. **Clear cache after major changes:**
-   ```bash
-   rm -rf .indexer_files/index_cache/*
-   ```
+# Create basic configuration
+cat > .indexer_files/config.json << 'EOF'
+{
+  "version": "1.0",
+  "main": {
+    "cache_type": "sqlite",
+    "local_icons": true,
+    "disable_file_downloads": false,
+    "disable_folder_downloads": false,
+    "index_hidden": false,
+    "deny_list": "",
+    "allow_list": ""
+  },
+  "exclusions": {
+    "index_folders": true,
+    "index_txt": true,
+    "index_php": true,
+    "index_js": true,
+    "index_css": true,
+    "index_html": true,
+    "index_json": true,
+    "index_xml": true,
+    "index_md": true,
+    "index_png": true,
+    "index_jpg": true,
+    "index_gif": true,
+    "index_pdf": true,
+    "index_mp4": true,
+    "index_mp3": true,
+    "index_zip": true
+  },
+  "viewable_files": {
+    "view_txt": true,
+    "view_php": true,
+    "view_js": true,
+    "view_css": true,
+    "view_html": true,
+    "view_json": true,
+    "view_xml": true,
+    "view_md": true,
+    "view_png": true,
+    "view_jpg": true,
+    "view_gif": true,
+    "view_pdf": true,
+    "view_mp4": true,
+    "view_mp3": true
+  }
+}
+EOF
 
-### Configuration Migration
-
-The system automatically migrates:
-- `custom_exclusions` → `deny_list`
-- Adds new settings with defaults
-- Preserves user customizations
-- Maintains backward compatibility
+# Set proper permissions
+chmod 644 .indexer_files/config.json
+```
 
 ### Backup and Recovery
 
-**Automatic backups:**
-- `config.json.backup.[timestamp]` before updates
-- Automatic restoration on failed updates
-- Change logging in `config_updates.log`
+**Manual backup procedures:**
 
-**Manual recovery:**
 ```bash
-# Restore from backup
-cp .indexer_files/config.json.backup.2025-01-10_15-30-00 .indexer_files/config.json
+# Create backup before changes
+cp .indexer_files/config.json .indexer_files/config.json.backup.$(date +%Y%m%d_%H%M%S)
 
-# Reset to defaults
-rm .indexer_files/config.json
-# Access indexer to regenerate
+# Verify backup integrity
+cat .indexer_files/config.json | python -m json.tool > /dev/null && echo "Configuration valid"
+
+# Restore from backup
+cp .indexer_files/config.json.backup.20250924_150000 .indexer_files/config.json
 ```
 
 ### Troubleshooting Configuration
 
 #### Configuration Not Applied
 1. **Check JSON syntax**
+   ```bash
+   python -m json.tool .indexer_files/config.json
+   ```
 2. **Clear cache**
+   ```bash
+   rm -rf .indexer_files/index_cache/*
+   ```
 3. **Verify file permissions**
-4. **Check for automatic overwrites**
+   ```bash
+   ls -la .indexer_files/config.json
+   ```
 
 #### Performance Issues
 1. **Enable SQLite caching**
+   ```json
+   {"main": {"cache_type": "sqlite"}}
+   ```
 2. **Simplify deny/allow patterns**
 3. **Review extension settings**
 
@@ -486,4 +505,4 @@ rm .indexer_files/config.json
 **Related Documentation:**
 - [Security Guide](security.md) - Security-focused configuration
 - [Troubleshooting Guide](troubleshooting.md) - Configuration issues
-- [API Reference](api-reference.md) - Configuration API endpoints
+- [Installation Guide](installation.md) - Configuration setup

@@ -269,7 +269,7 @@ Download buttons may be missing if:
 ### Performance Tips
 
 #### For Large Directories
-1. **Allow time for initial loading** - subsequent visits are faster
+1. **Allow time for initial loading** - subsequent visits are faster with caching
 2. **Use specific directory URLs** instead of browsing from root
 3. **Close unnecessary browser tabs** to free memory
 4. **Clear browser cache** if experiencing display issues
@@ -301,6 +301,11 @@ Download buttons may be missing if:
 - Clear browser cache and cookies
 - Try different browser or device
 
+**Display issues:**
+- Icons may not load if not configured locally
+- Interface adapts to different screen sizes
+- Try refreshing the page or clearing cache
+
 #### Browser Compatibility
 
 **Best experience with:**
@@ -324,73 +329,32 @@ If you encounter issues:
 
 Remember that specific functionality may vary based on administrator configuration and server environment.
 
----
-
-**Related Documentation:**
-- [Configuration Guide](configuration.md) - Administrator settings
-- [Troubleshooting Guide](troubleshooting.md) - Common issues and solutions special configuration
-
-**Cannot download files**
-- Downloads may be disabled by administrator
-- Check browser popup blockers
-- Verify sufficient disk space for downloads
-
-**Slow performance**
-- Large directories take time to load initially
-- Subsequent visits should be faster due to caching
-- Network speed affects file viewing and downloads
-
-**View issues**
-- Some file types require specific browser plugins
-- Mobile devices may not support all file viewing
-- PDF and office documents depend on browser capabilities
-
-### Browser Compatibility
-
-**Recommended browsers:**
-- Chrome/Chromium (latest versions)
-- Firefox (latest versions)
-- Safari (latest versions)
-- Edge (latest versions)
-
-**Limitations with older browsers:**
-- Reduced file type viewing support
-- Potential interface display issues
-- Limited mobile responsiveness
-
-### Getting Help
-
-If you encounter issues:
-1. Try refreshing the page (F5 or Ctrl+R)
-2. Clear browser cache and cookies
-3. Try a different browser
-4. Contact the server administrator
-5. Check browser console for error messages (F12)
-
-## Administrator Notes for Users
-
-### Customization
-
-The appearance and behavior of the indexer may vary depending on:
-- Administrator configuration settings
-- Security policies in place
-- Network and server environment
-- Organizational requirements
-
-### Access Control
-
-Access to files and folders may be:
-- Unrestricted (full access to directory contents)
-- Filtered (certain file types or directories hidden)
-- Restricted (downloads disabled or limited)
-- Monitored (usage tracking enabled)
+## Configuration Notes for Users
 
 ### Feature Availability
 
-Available features depend on administrator settings:
+Available features depend on administrator settings and manual configuration:
 - File downloads may be enabled or disabled
 - Folder ZIP downloads may be available
 - File viewing capabilities may vary
 - Sorting and display options may be customized
+- Icon display depends on local icon configuration
 
-This user guide covers the standard features available in 5q12's Indexer. Specific functionality may vary based on administrator configuration and server environment.
+### Visual Elements
+
+The indexer operates entirely offline with:
+- **Local icons** - All icons served from the server itself
+- **No external resources** - Fully self-contained operation
+- **Consistent performance** - No dependency on external services
+- **Privacy-focused** - No external connections or tracking
+
+### Customization
+
+The appearance and behavior may vary based on:
+- Administrator configuration settings
+- Security policies in place
+- Network and server environment
+- Organizational requirements
+- Manual configuration choices
+
+This user guide covers the standard features available in 5q12's Indexer. All functionality is now locally provided with no external dependencies.

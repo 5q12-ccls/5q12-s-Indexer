@@ -11,6 +11,7 @@ The automated installation script is the easiest way to install 5q12's Indexer. 
 - **PHP optimization** - Installs and configures PHP-FPM with required extensions
 - **System integration** - Sets up system-wide command access
 - **Update management** - Built-in update checking and upgrading
+- **Configuration creation** - Creates basic configuration files
 
 ### Compatibility
 
@@ -35,7 +36,7 @@ The automated installation script is the easiest way to install 5q12's Indexer. 
 
 ```bash
 # Download the installation script
-wget https://github.com/5q12-ccls/5q12-s-Indexer/raw/main/install.sh
+wget https://ccls.icu/src/repositories/5q12-indexer/main/install.sh
 
 # Make it executable
 chmod +x install.sh
@@ -104,6 +105,15 @@ sudo 5q12-index install /path/to/directory
 sudo 5q12-index update
 ```
 
+### Configuration Management
+```bash
+# Create default configuration
+sudo 5q12-index create-config /path/to/installation
+
+# Validate configuration
+5q12-index validate-config /path/to/installation
+```
+
 ### Help
 ```bash
 # Show help information
@@ -132,9 +142,10 @@ sudo 5q12-index update
    - Creates system directories
 
 4. **Indexer Setup**
-   - Downloads latest index.php
+   - Downloads latest index.php from repository
+   - Creates basic configuration file
    - Sets proper ownership (www-data)
-   - Initializes configuration
+   - Initializes cache directories
    - Creates management symlinks
 
 5. **Service Management**
@@ -153,7 +164,8 @@ sudo 5q12-index update
 
 **Indexer Files:**
 - `{install-path}/index.php` - Main indexer file
-- `{install-path}/.indexer_files/` - Generated configuration and cache
+- `{install-path}/.indexer_files/` - Configuration and cache directories
+- `{install-path}/.indexer_files/config.json` - Basic configuration
 
 ## Troubleshooting
 
@@ -200,6 +212,18 @@ php -m | grep -E 'json|sqlite3|zip|curl'
 sudo apt install php8.3-sqlite3 php8.3-zip php8.3-curl php8.3-mbstring
 ```
 
+### Configuration Issues
+```bash
+# Check configuration exists
+ls -la /path/to/installation/.indexer_files/config.json
+
+# Validate configuration
+python -m json.tool /path/to/installation/.indexer_files/config.json
+
+# Recreate configuration if needed
+sudo 5q12-index create-config /path/to/installation
+```
+
 ### Common Error Solutions
 
 **"Port 5012 already in use"**
@@ -215,6 +239,10 @@ sudo apt install php8.3-sqlite3 php8.3-zip php8.3-curl php8.3-mbstring
 - Update package lists: `sudo apt update`
 - Check internet connection
 - Verify distribution compatibility
+
+**"Configuration file not found"**
+- Run: `sudo 5q12-index create-config /path/to/installation`
+- Check file permissions: `ls -la .indexer_files/config.json`
 
 ## Manual Cleanup
 
@@ -263,9 +291,9 @@ Edit `/etc/php/8.3/fpm/php.ini` for global changes or create pool-specific confi
 
 After successful installation:
 
-1. **Configure the indexer** - See [Configuration Guide](configuration.md)
+1. **Review the configuration** - Edit `.indexer_files/config.json` as needed
 2. **Secure your installation** - See [Security Guide](security.md)
-3. **Customize appearance** - Edit configuration settings
+3. **Customize settings** - See [Configuration Guide](configuration.md)
 4. **Set up backups** - Regular backups of your files and configuration
 
 ---

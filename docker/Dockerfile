@@ -4,7 +4,7 @@ FROM php:8.3-fpm-alpine
 # Set maintainer and version
 LABEL maintainer="5q12"
 LABEL description="5q12's Indexer - Web-based file browser and indexer"
-LABEL version="1.1.15"
+LABEL version="1.1.18"
 
 # Install system dependencies and build tools
 RUN apk add --no-cache \
@@ -16,7 +16,9 @@ RUN apk add --no-cache \
     unzip \
     curl \
     ca-certificates \
-    libzip-dev
+    libzip-dev \
+    bash \
+    file
 
 # Install PHP extensions
 RUN docker-php-ext-install \
@@ -37,26 +39,35 @@ RUN mkdir -p /www/indexer \
     && mkdir -p /run/nginx \
     && mkdir -p /run/php \
     && mkdir -p /config \
-    && mkdir -p /files
+    && mkdir -p /files \
+    && mkdir -p /app
 
 # Copy nginx configuration
 COPY docker/nginx.conf /etc/nginx/nginx.conf
 COPY docker/5q12-indexer.conf /etc/nginx/http.d/default.conf
 
-# Copy PHP-FPM configuration
+# Copy PHP-FPM configuration  
 COPY docker/php-fpm.conf /usr/local/etc/php-fpm.d/www.conf
 
 # Copy supervisor configuration
 COPY docker/supervisord.conf /etc/supervisord.conf
 
-# Copy indexer files
-COPY index.php /www/indexer/
+# Copy all source files including config and index.php
+COPY source/ /app/source/
+
+# Copy index.php to application directory
+COPY source/index.php /www/indexer/
+
+# Copy default config to container (will be used if no external config mounted)
+# Use explicit wildcard to copy all files and subdirectories
+COPY source/config /app/default-config
+
+# Copy entrypoint script
 COPY docker/entrypoint.sh /entrypoint.sh
 
 # Create symlinks from application paths to mount points
-# Make sure the target directories exist first
-RUN mkdir -p /www/indexer/.indexer_files /www/indexer/files \
-    && rm -rf /www/indexer/.indexer_files /www/indexer/files \
+# Remove any existing directories first, then create symlinks
+RUN rm -rf /www/indexer/.indexer_files /www/indexer/files \
     && ln -sf /config /www/indexer/.indexer_files \
     && ln -sf /files /www/indexer/files
 
@@ -64,8 +75,12 @@ RUN mkdir -p /www/indexer/.indexer_files /www/indexer/files \
 RUN chown -R www-data:www-data /www/indexer \
     && chown -R www-data:www-data /config \
     && chown -R www-data:www-data /files \
+    && chown -R www-data:www-data /app \
     && chmod +x /entrypoint.sh \
     && chmod 644 /www/indexer/index.php
+
+# Set environment variable to identify Docker environment
+ENV DOCKER_ENV=true
 
 # Create volume mount points
 VOLUME ["/config", "/files"]
@@ -77,7 +92,7 @@ EXPOSE 5012
 WORKDIR /www/indexer
 
 # Health check to ensure the service is running
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD curl -f http://localhost:5012/ || exit 1
 
 # Use entrypoint script
