@@ -63,6 +63,9 @@ Access at: `http://your-server:5012`
 # Download indexer repository
 wget https://ccls.icu/src/repositories/5q12-indexer/main/?download=archive -O 5q12-indexer.zip
 
+# Extract content
+unzip 5q12-indexer.zip
+
 # Move to desired location
 sudo mv main/* main/.* /var/www/html/ 2>/dev/null
 
