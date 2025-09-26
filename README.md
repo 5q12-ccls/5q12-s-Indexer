@@ -43,7 +43,7 @@ Access at: `http://localhost:5012`
 
 ```bash
 # Download installer
-wget https://ccls.icu/src/repositories/5q12-indexer/main/install.sh
+wget https://ccls.icu/src/test/5q12-indexer/main/install.sh/ -O install.sh
 chmod +x install.sh
 
 # Install to web directory
@@ -60,11 +60,11 @@ Access at: `http://your-server:5012`
 **For custom setups or other operating systems:**
 
 ```bash
-# Download indexer
-wget https://ccls.icu/src/repositories/5q12-indexer/main/index.php
+# Download indexer repository
+wget https://ccls.icu/src/repositories/5q12-indexer/main/?download=archive -O 5q12-indexer.zip
 
-# Place in web directory
-cp index.php /var/www/html/files/
+# Move to desired location
+sudo mv main/* main/.* /var/www/html/ 2>/dev/null
 
 # Configure web server (Nginx/Apache)
 # Create configuration manually (see Configuration section)
@@ -90,7 +90,7 @@ cp index.php /var/www/html/files/
 
 ## Configuration
 
-Create `.indexer_files/config.json` manually or let the indexer create defaults. Key settings:
+`.indexer_files/config.json` Key settings:
 
 ```json
 {
@@ -100,7 +100,6 @@ Create `.indexer_files/config.json` manually or let the indexer create defaults.
     "disable_folder_downloads": false,
     "index_hidden": false,            // Show hidden files
     "deny_list": "admin, logs, .git", // Exclude paths
-    "local_icons": true               // Always true - no external icons
   }
 }
 ```
@@ -143,11 +142,11 @@ Works with all modern browsers including mobile devices. No JavaScript required.
 **Latest Release:**
 ```bash
 # Download as archive
-wget https://ccls.icu/src/repositories/5q12-indexer/main/?download=archive
-unzip archive
+wget https://ccls.icu/src/repositories/5q12-indexer/main/?download=archive -O 5q12-indexer.zip
+unzip 5q12-indexer.zip
 
 # Or download individual file
-wget https://ccls.icu/src/repositories/5q12-indexer/main/index.php
+wget https://ccls.icu/src/repositories/5q12-indexer/main/index.php/ -O index.php
 ```
 
 **Repository:** https://ccls.icu/src/repositories/5q12-indexer/
