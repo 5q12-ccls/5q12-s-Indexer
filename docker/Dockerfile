@@ -3,31 +3,36 @@ FROM php:8.3-fpm-alpine3.22
 
 # Set maintainer and version
 LABEL maintainer="5q12"
-LABEL description="5q12's Indexer - Web-based file browser and indexer (Security Hardened)"
-LABEL version="1.1.18"
+LABEL description="5q12's Indexer - Secure file browser with s6-overlay (No Supervisor)"
+LABEL version="1.1.19"
 LABEL alpine.version="3.22.1"
-LABEL supervisor.version="4.2.5-r5+"
+LABEL process.manager="s6-overlay-v3"
+LABEL security.status="hardened"
+
+# Install s6-overlay (secure supervisor replacement)
+ARG S6_OVERLAY_VERSION=3.1.6.2
+ADD https://github.com/just-containers/s6-overlay/releases/download/v${S6_OVERLAY_VERSION}/s6-overlay-noarch.tar.xz /tmp
+ADD https://github.com/just-containers/s6-overlay/releases/download/v${S6_OVERLAY_VERSION}/s6-overlay-x86_64.tar.xz /tmp
+
+# Extract s6-overlay
+RUN tar -C / -Jxpf /tmp/s6-overlay-noarch.tar.xz && \
+    tar -C / -Jxpf /tmp/s6-overlay-x86_64.tar.xz && \
+    rm -f /tmp/s6-overlay-*.tar.xz
 
 # Update base system first to get latest security patches
 RUN apk update && apk upgrade
 
-# Install system dependencies and build tools with latest secure versions
-# Note: Using --no-cache to avoid storing package cache
+# Install system dependencies (NO SUPERVISOR - using s6-overlay instead)
 RUN apk add --no-cache \
-    # Latest nginx from Alpine 3.22 repository
     nginx \
-    # Latest supervisor from Alpine 3.22 (addresses CVE-2023-27482)
-    supervisor \
     sqlite \
     sqlite-dev \
-    # Use p7zip instead of unzip to avoid CVE-2008-0888
     p7zip \
     curl \
     ca-certificates \
     libzip-dev \
     bash \
     file \
-    # Add specific security-focused packages
     tzdata \
     && rm -rf /var/cache/apk/*
 
@@ -50,7 +55,6 @@ RUN if ! getent group www-data >/dev/null; then addgroup -g 82 -S www-data; fi &
 # Create necessary directories with proper permissions
 RUN mkdir -p /www/indexer \
     && mkdir -p /var/log/nginx \
-    && mkdir -p /var/log/supervisor \
     && mkdir -p /run/nginx \
     && mkdir -p /run/php \
     && mkdir -p /config \
@@ -59,15 +63,18 @@ RUN mkdir -p /www/indexer \
     && mkdir -p /tmp/sessions \
     && chmod 1777 /tmp/sessions
 
+# Create s6 service directories
+RUN mkdir -p /etc/s6-overlay/s6-rc.d/nginx/{dependencies.d} \
+             /etc/s6-overlay/s6-rc.d/php-fpm/{dependencies.d} \
+             /etc/s6-overlay/s6-rc.d/init-indexer \
+             /etc/s6-overlay/s6-rc.d/user/contents.d
+
 # Copy nginx configuration
 COPY docker/nginx.conf /etc/nginx/nginx.conf
 COPY docker/5q12-indexer.conf /etc/nginx/http.d/default.conf
 
 # Copy PHP-FPM configuration with security enhancements
 COPY docker/php-fpm.conf /usr/local/etc/php-fpm.d/www.conf
-
-# Copy supervisor configuration
-COPY docker/supervisord.conf /etc/supervisord.conf
 
 # Copy all source files including config and index.php
 COPY source/ /app/source/
@@ -78,11 +85,10 @@ COPY source/index.php /www/indexer/
 # Copy default config to container (will be used if no external config mounted)
 COPY source/config /app/default-config
 
-# Copy entrypoint script
-COPY docker/entrypoint.sh /entrypoint.sh
+# Copy s6 service definitions (created by setup script)
+COPY docker/s6-services/ /etc/s6-overlay/s6-rc.d/
 
 # Create symlinks from application paths to mount points
-# Remove any existing directories first, then create symlinks
 RUN rm -rf /www/indexer/.indexer_files /www/indexer/files \
     && ln -sf /config /www/indexer/.indexer_files \
     && ln -sf /files /www/indexer/files
@@ -93,22 +99,22 @@ RUN chown -R www-data:www-data /www/indexer \
     && chown -R www-data:www-data /files \
     && chown -R www-data:www-data /app \
     && chown -R www-data:www-data /tmp/sessions \
-    && chmod +x /entrypoint.sh \
+    && chmod +x /etc/s6-overlay/s6-rc.d/*/run 2>/dev/null || true \
     && chmod 644 /www/indexer/index.php \
     && chmod -R 755 /www/indexer \
     && chmod -R 750 /config \
     && chmod -R 755 /files
 
-# Security: Remove unnecessary packages after installation
-RUN apk del --purge \
-    && rm -rf /var/cache/apk/* \
-    && rm -rf /tmp/*
+# Security: Remove unnecessary packages and clean up
+RUN rm -rf /var/cache/apk/* /tmp/* && \
+    find / -type f -perm /u+s -exec chmod u-s {} \; 2>/dev/null || true && \
+    find / -type f -perm /g+s -exec chmod g-s {} \; 2>/dev/null || true
 
-# Set environment variable to identify Docker environment
+# Set environment variables
 ENV DOCKER_ENV=true
-
-# Security: Run as non-root user where possible
-USER www-data
+ENV S6_BEHAVIOUR_IF_STAGE2_FAILS=2
+ENV S6_CMD_WAIT_FOR_SERVICES_MAXTIME=0
+ENV S6_LOGGING=1
 
 # Create volume mount points
 VOLUME ["/config", "/files"]
@@ -123,11 +129,6 @@ WORKDIR /www/indexer
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD curl -f --max-time 5 http://localhost:5012/ || exit 1
 
-# Switch back to root for entrypoint (required for service management)
-USER root
-
-# Use entrypoint script
-ENTRYPOINT ["/entrypoint.sh"]
-
-# Start supervisor
-CMD ["/usr/bin/supervisord", "-c", "/etc/supervisord.conf"]
+# Use s6-overlay as init (replaces supervisord completely)
+ENTRYPOINT ["/init"]
+CMD []

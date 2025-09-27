@@ -1,0 +1,5 @@
+#!/command/execlineb -P
+# Redirect stderr to stdout for proper logging
+fdmove -c 2 1
+# Start PHP-FPM in foreground mode
+exec php-fpm -F
