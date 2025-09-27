@@ -43,7 +43,7 @@ Access at: `http://localhost:5012`
 
 ```bash
 # Download installer
-wget https://ccls.icu/src/test/5q12-indexer/main/install.sh/ -O install.sh
+wget https://ccls.icu/src/repositories/5q12-indexer/main/install.sh/ -O install.sh
 chmod +x install.sh
 
 # Install to web directory
