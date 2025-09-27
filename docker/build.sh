@@ -8,7 +8,7 @@ set -e
 # Configuration
 DOCKER_USERNAME="5q12"
 IMAGE_NAME="5q12-indexer"
-VERSION="1.1.18"
+VERSION="1.1.19"
 DOCKERFILE_PATH="."
 
 # Full image names
