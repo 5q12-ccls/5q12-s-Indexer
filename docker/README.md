@@ -1,380 +1,267 @@
-# 5q12's Indexer - Docker Image
+# 5q12 Indexer - Build System
 
-A PHP-Based file browser with sorting, filtering, download, icons and caching. Configurable indexing with intelligent configuration management and environment variable support.
+This directory contains the Docker build system for the 5q12 Indexer application. The build system uses Alpine Linux with s6-overlay for process management.
 
-## Quick Start
+## Directory Structure
+
+```
+.
+├── build.sh                    # Main build script (includes all functionality)
+├── Dockerfile                 # Multi-stage Docker build
+├── docker-compose.yml         # Development compose file
+├── README.md                  # This file
+├── docker/                    # Docker configuration files
+│   ├── nginx.conf            # Nginx main configuration
+│   ├── 5q12-indexer.conf     # Nginx site configuration
+│   ├── php-fpm.conf          # PHP-FPM configuration
+│   ├── s6-services/          # S6-overlay service definitions
+│   │   ├── nginx/            # Nginx service
+│   │   │   ├── dependencies.d/
+│   │   │   │   └── init-indexer
+│   │   │   ├── run
+│   │   │   └── type
+│   │   ├── php-fpm/          # PHP-FPM service
+│   │   │   ├── dependencies.d/
+│   │   │   │   └── init-indexer
+│   │   │   ├── run
+│   │   │   └── type
+│   │   ├── init-indexer/     # Initialization service
+│   │   │   ├── run
+│   │   │   ├── type
+│   │   │   └── up
+│   │   ├── user/             # User bundle (nginx + php-fpm)
+│   │   │   ├── contents.d/
+│   │   │   │   ├── nginx
+│   │   │   │   └── php-fpm
+│   │   │   └── type
+│   │   └── user2/            # User2 bundle (contains user)
+│   │       ├── contents.d/
+│   │       │   └── user
+│   │       └── type
+│   └── scripts/              # Initialization scripts
+│       └── init-indexer.sh   # Main initialization script
+└── source/                    # Application source code
+    ├── index.php             # Main application file
+    └── config/               # Default configuration
+```
+
+## Version System
+
+The project uses a revision-based versioning system for security patches:
+
+- **Base Version**: `X.Y.Z` (e.g., `1.1.19`)
+- **Security Patches**: `X.Y.Z-rN` (e.g., `1.1.19-r1`, `1.1.19-r2`)
+
+Where:
+- `X.Y.Z` represents major.minor.patch versions for feature releases
+- `rN` represents revision number for security patches and hotfixes
+
+## Build Scripts
+
+### build.sh
+
+The main build script that handles all build system functionality including Docker image creation, s6-overlay setup, and deployment operations.
+
+**Usage:**
+```bash
+./build.sh                    # Build with default version
+./build.sh 1.1.19-r1          # Build with custom version
+./build.sh --no-cache         # Build with no cache
+./build.sh 1.1.19-r1 --no-cache # Build custom version with no cache
+```
+
+**Generated Tags:**
+- `5q12/5q12-indexer:VERSION`
+- `5q12/5q12-indexer:latest`
+- `5q12/5q12-indexer:VERSION-s6`
+
+**Prerequisites:**
+- Docker installed and running
+- All required files present (automatically checked)
+- S6-overlay services configured (automatically set up if needed)
+
+## Docker Configuration
+
+### Process Management
+
+The build system uses s6-overlay v3 instead of supervisor for better security and container-native process management.
+
+**Services:**
+- `init-indexer`: Initialization and configuration setup
+- `nginx`: Web server (depends on init-indexer)
+- `php-fpm`: PHP FastCGI Process Manager (depends on init-indexer)
+- `user`: Service bundle containing nginx and php-fpm
+- `user2`: Service bundle containing user
+
+### Environment Variables
+
+The build system supports comprehensive environment variable configuration:
+
+**Main Configuration:**
+- `INDEXER_ACCESS_URL`: Base URL for the application
+- `INDEXER_CACHE_TYPE`: Cache type (sqlite/json)
+- `INDEXER_ICON_TYPE`: Icon display type
+- `INDEXER_INDEX_ALL`: Index all files
+- `INDEXER_INDEX_HIDDEN`: Include hidden files
+- `INDEXER_DISABLE_FILE_DOWNLOADS`: Disable file downloads
+- `INDEXER_DISABLE_FOLDER_DOWNLOADS`: Disable folder downloads
+
+**Filetype Controls:**
+- `INDEXER_VIEW_FILETYPE_*`: Control file viewing (use underscores for hyphens)
+- `INDEXER_INDEX_FILETYPE_*`: Control file indexing
+
+**System Settings:**
+- `TZ`: Timezone setting
+- `S6_VERBOSITY`: S6-overlay logging level
+
+## Building Images
+
+### Prerequisites Check
+
+The build script automatically verifies:
+- Required files exist
+- Directory structure is correct
+- S6 services are configured
+- Script permissions are set
+- Environment variable processing is present
+
+### Build Process
+
+1. **Validation**: Checks all required files and directories
+2. **Permission Setup**: Makes scripts executable
+3. **Docker Build**: Creates multi-tagged images
+4. **Verification**: Shows build results and usage examples
+
+### Development Workflow
 
 ```bash
-# Create docker-compose.yml
-cat > docker-compose.yml << EOF
-services:
-  5q12-indexer:
-    image: 5q12/5q12-indexer:latest
-    container_name: 5q12-indexer
-    restart: unless-stopped
-    ports:
-      - "5012:5012"  # Access the indexer on port 5012
-    environment:
-      - TZ=Etc/UTC   # Set your timezone (optional)
-    volumes:
-      # Configuration directory - stores settings and cache
-      - /example_host_path/config:/config
-      
-      # Files directory - mount your content here to index
-      - /example_host_path/files:/files
-EOF
+# Clean build environment
+docker system prune -a --volumes --force
 
-# Start the indexer
-docker compose up -d
+# Build development image
+./build.sh devtest-r1 --no-cache
+
+# Test locally
+mkdir -p test-indexer/{config,files}
+docker run -d --name test-indexer-s6 -p 5012:5012 \
+  -v $(pwd)/test-indexer/config:/config \
+  -v $(pwd)/test-indexer/files:/files \
+  -e INDEXER_CACHE_TYPE=json \
+  5q12/5q12-indexer:devtest-r1
+
+# Test environment variables
+docker exec test-indexer-s6 cat /config/config.json | grep cache_type
+
+# Check logs
+docker logs test-indexer-s6
+
+# Clean up
+docker rm -f test-indexer-s6
+rm -rf test-indexer/
 ```
 
-Access at: `http://localhost:5012`
+## Security Features
 
-**Important:** Replace `/example_host_path/` with your actual host directories. The `/config` volume persists settings and cache, while `/files` contains the content you want to browse.
+### Process Management
+- No supervisor vulnerabilities
+- Reduced Python attack surface
+- Container-native s6-overlay
+- Proper signal handling
 
-## What's Included
+### Environment Variable Processing
+- Multiple fallback methods for reading variables
+- Support for s6-overlay environment files
+- Enhanced debugging and error reporting
+- Secure configuration merging
 
-- **Alpine Linux** base image for small size
-- **PHP 8.3-FPM** with required extensions
-- **Nginx** web server with optimized configuration
-- **Supervisor** for process management
-- **SQLite** support for high-performance caching
-- **ZIP** support for folder downloads
-- **Smart config management** with version-aware updates
-- **Environment variable configuration** for Docker-native setup
-
-## Supported Tags
-
-- `latest` - Latest stable release (v1.1.18)
-- `1.1.18` - Specific release version
-
-## Volumes
-
-| Path | Purpose | Required | Notes |
-|------|---------|----------|--------|
-| `/config` | Configuration, cache, and local resources | Yes | Auto-managed, preserves user settings |
-| `/files` | Content directory to browse and index | Yes | Supports dot folders/files |
-
-## Environment Variables
-
-### Basic Configuration
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `TZ` | `Etc/UTC` | Container timezone |
-
-### Main Settings
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `INDEXER_ACCESS_URL` | `""` | Base URL for generating absolute links |
-| `INDEXER_CACHE_TYPE` | `sqlite` | Cache type (`sqlite` or `json`) |
-| `INDEXER_ICON_TYPE` | `default` | Icon display (`default`, `minimal`, `emoji`, `disabled`) |
-| `INDEXER_DISABLE_FILE_DOWNLOADS` | `false` | Disable individual file downloads |
-| `INDEXER_DISABLE_FOLDER_DOWNLOADS` | `false` | Disable folder ZIP downloads |
-| `INDEXER_INDEX_HIDDEN` | `false` | Index hidden files/folders (starting with `.`) |
-| `INDEXER_INDEX_ALL` | `false` | Index all files regardless of other settings |
-| `INDEXER_DENY_LIST` | `""` | Comma-separated list of paths to deny |
-| `INDEXER_ALLOW_LIST` | `""` | Comma-separated list of paths to allow |
-
-### File Type Configuration
-
-Configure indexing and viewing for any file type using these patterns:
-
-- `INDEXER_INDEX_FILETYPE_{TYPE}=true/false` - Whether to show files of this type in listings
-- `INDEXER_VIEW_FILETYPE_{TYPE}=true/false` - Whether files of this type can be viewed in browser
-
-Examples:
-```yaml
-environment:
-  # Disable PHP file indexing and viewing
-  - INDEXER_INDEX_FILETYPE_PHP=false
-  - INDEXER_VIEW_FILETYPE_PHP=false
-  
-  # Enable JavaScript viewing but disable Markdown
-  - INDEXER_VIEW_FILETYPE_JS=true
-  - INDEXER_INDEX_FILETYPE_MD=false
-  - INDEXER_VIEW_FILETYPE_MD=false
-  
-  # Configure image types
-  - INDEXER_INDEX_FILETYPE_PNG=true
-  - INDEXER_VIEW_FILETYPE_PNG=true
-```
-
-## Port
-
-The container exposes port `5012` for the web interface.
-
-## Configuration Management
-
-The indexer features intelligent configuration management:
-
-- **Automatic Updates**: Missing config fields are added when updating containers
-- **Environment Override**: Environment variables take precedence over config.json
-- **Setting Preservation**: Your customizations are never lost during updates
-- **Version Tracking**: Config version automatically matches container version
-- **Dynamic Filetype Support**: Add support for new file types without rebuilding
-
-## Example Configurations
-
-### Basic File Server
-```yaml
-services:
-  5q12-indexer:
-    image: 5q12/5q12-indexer:latest
-    container_name: file-server
-    restart: unless-stopped
-    ports:
-      - "8080:5012"
-    volumes:
-      - ./config:/config
-      - ./public-files:/files
-```
-
-### Secure Document Server
-```yaml
-services:
-  5q12-indexer:
-    image: 5q12/5q12-indexer:latest
-    container_name: secure-docs
-    restart: unless-stopped
-    ports:
-      - "5012:5012"
-    environment:
-      - TZ=America/New_York
-      - INDEXER_ACCESS_URL=https://docs.example.com
-      - INDEXER_ICON_TYPE=minimal
-      - INDEXER_INDEX_HIDDEN=false
-      - INDEXER_DENY_LIST=admin,logs,.git,private/*
-      - INDEXER_INDEX_FILETYPE_PHP=false
-      - INDEXER_INDEX_FILETYPE_SH=false
-      - INDEXER_VIEW_FILETYPE_PDF=true
-      - INDEXER_VIEW_FILETYPE_MD=true
-    volumes:
-      - ./config:/config
-      - ./documents:/files:ro
-```
-
-### Media Server with Restrictions
-```yaml
-services:
-  5q12-indexer:
-    image: 5q12/5q12-indexer:latest
-    container_name: media-server
-    restart: unless-stopped
-    ports:
-      - "5012:5012"
-    environment:
-      - TZ=Etc/UTC
-      - INDEXER_CACHE_TYPE=sqlite
-      - INDEXER_DISABLE_FILE_DOWNLOADS=true
-      - INDEXER_DISABLE_FOLDER_DOWNLOADS=true
-      - INDEXER_INDEX_FILETYPE_MP4=true
-      - INDEXER_VIEW_FILETYPE_MP4=true
-      - INDEXER_INDEX_FILETYPE_MP3=true
-      - INDEXER_VIEW_FILETYPE_MP3=true
-      - INDEXER_INDEX_FILETYPE_JPG=true
-      - INDEXER_VIEW_FILETYPE_JPG=true
-    volumes:
-      - ./config:/config
-      - /mnt/media:/files:ro
-```
-
-### Development Environment
-```yaml
-services:
-  5q12-indexer:
-    image: 5q12/5q12-indexer:latest
-    container_name: dev-files
-    restart: unless-stopped
-    ports:
-      - "5012:5012"
-    environment:
-      - TZ=America/New_York
-      - INDEXER_INDEX_HIDDEN=true
-      - INDEXER_INDEX_ALL=false
-      - INDEXER_ALLOW_LIST=src/*,docs/*,README.md
-      - INDEXER_VIEW_FILETYPE_JS=true
-      - INDEXER_VIEW_FILETYPE_TS=true
-      - INDEXER_VIEW_FILETYPE_JSON=true
-      - INDEXER_VIEW_FILETYPE_MD=true
-      - INDEXER_INDEX_FILETYPE_PHP=true
-      - INDEXER_VIEW_FILETYPE_PHP=false
-    volumes:
-      - ./config:/config
-      - ./project:/files
-```
-
-### Production Setup
-```yaml
-services:
-  5q12-indexer:
-    image: 5q12/5q12-indexer:1.1.18  # Pin version
-    container_name: 5q12-indexer-prod
-    restart: unless-stopped
-    ports:
-      - "5012:5012"
-    environment:
-      - TZ=Etc/UTC
-      - INDEXER_ACCESS_URL=https://files.example.com
-      - INDEXER_CACHE_TYPE=sqlite
-      - INDEXER_ICON_TYPE=default
-      - INDEXER_INDEX_HIDDEN=false
-      - INDEXER_DENY_LIST=.env,.git,admin,logs
-    volumes:
-      - indexer-config:/config
-      - /srv/public:/files:ro
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-          cpus: '0.5'
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-volumes:
-  indexer-config:
-```
-
-## Manual Configuration
-
-While environment variables are recommended, you can still manually edit `config.json` in the `/config` volume:
-
-```json
-{
-  "version": "1.1.18",
-  "main": {
-    "access_url": "",
-    "cache_type": "sqlite",
-    "icon_type": "default",
-    "disable_file_downloads": false,
-    "disable_folder_downloads": false,
-    "index_hidden": false,
-    "index_all": false,
-    "deny_list": "",
-    "allow_list": ""
-  },
-  "exclusions": {
-    "index_folders": true,
-    "index_non-descript-files": true,
-    "index_php": false,
-    "index_js": true
-  },
-  "viewable_files": {
-    "view_non-descript-files": false,
-    "view_php": false,
-    "view_js": true
-  }
-}
-```
-
-Environment variables will override config.json settings on container startup.
-
-## Features
-
-- **File browsing** with sorting by name, size, date, type
-- **Environment variable configuration** for Docker-native setup
-- **Dynamic filetype support** for any file extension
-- **Dot folder support** - Browse hidden directories and files
-- **Download support** for individual files and folders (ZIP)
-- **In-browser viewing** for text, images, videos, PDFs
-- **Icon system** with 150+ file type icons
-- **High-performance caching** using SQLite
-- **Security controls** with configurable access rules
-- **Mobile responsive** interface
-- **No JavaScript** required
-- **Smart configuration updates** preserve settings across versions
-
-## Security
-
-- Runs as non-root user (`www-data`, UID 82)
-- Path traversal protection built-in
-- Configurable file access controls via environment variables
-- Selective security rules (blocks sensitive files, allows legitimate access)
-- No privileged access required
-- Read-only mounts supported
-
-## Health Check
-
-The container includes a built-in health check that verifies the web service is responding correctly.
-
-## Updates
-
-```bash
-# Pull latest image
-docker compose pull
-
-# Recreate container (preserves config automatically)
-docker compose up -d
-
-# Clean up old images
-docker image prune
-```
-
-Your configuration will be automatically updated to support new features while preserving all your custom settings. Environment variables take precedence and are applied on every startup.
-
-## Migration from Earlier Versions
-
-If upgrading from versions prior to 1.1.18:
-
-1. Your existing configuration will be automatically preserved
-2. New configuration fields will be added for enhanced functionality  
-3. Consider migrating manual config.json edits to environment variables
-4. The system will log what changes were made during the update
-5. No manual intervention required
+### Container Hardening
+- Non-root user execution
+- Minimal Alpine Linux base
+- Position-independent executables
+- Stack-smashing protection
 
 ## Troubleshooting
 
-### Permission Issues
-```bash
-# Fix config directory permissions
-sudo chown -R 82:82 ./config
+### Common Build Issues
 
-# Or use permissive permissions
-chmod -R 755 ./config ./files
+**Missing s6-services directory:**
+The build script will check for this automatically and warn you if the s6-overlay structure is missing.
+
+**Permission errors:**
+```bash
+chmod +x build.sh
+chmod +x docker/scripts/*.sh
 ```
 
-### Container Logs
-```bash
-# View logs (includes config update details)
-docker compose logs -f 5q12-indexer
+**Missing files:**
+- Check that all files in the build script's validation exist
+- Verify source directory structure
+- Ensure Docker configuration files are present
 
-# Check environment variable processing
-docker compose logs 5q12-indexer | grep -E "(environment|override)"
+**Environment variables not working:**
+- Verify `init-indexer.sh` contains enhanced processing
+- Check s6-overlay environment files in `/var/run/s6/container_environment/`
+- Use `S6_VERBOSITY=2` for debugging
+
+### Build Script Validation
+
+The build script performs comprehensive validation:
+- File and directory existence
+- Script permissions
+- S6 service structure
+- Environment variable processing presence
+
+### Testing Environment Variables
+
+```bash
+# Test specific variable
+docker run --rm -e INDEXER_CACHE_TYPE=json IMAGE_NAME \
+  sh -c 'cat /config/config.json | grep cache_type'
+
+# Test multiple variables
+docker run --rm \
+  -e INDEXER_CACHE_TYPE=json \
+  -e INDEXER_INDEX_ALL=true \
+  IMAGE_NAME sh -c 'cat /config/config.json | grep -E "(cache_type|index_all)"'
 ```
 
-### Configuration Issues
-```bash
-# View startup logs to see config updates
-docker compose logs 5q12-indexer | grep -E "(config|version|environment)"
+## Migration Notes
 
-# Check current config version
-docker exec 5q12-indexer cat /config/config.json | grep version
+### From Supervisor to S6-Overlay
 
-# Verify environment variable processing
-docker exec 5q12-indexer env | grep INDEXER_
-```
+If migrating from supervisor-based builds:
+1. Run `./s6.sh` to set up s6 services
+2. Remove any supervisor configuration references
+3. Update any custom scripts to use s6-overlay patterns
+4. Test thoroughly with environment variables
 
-### Access Issues
-```bash
-# Test connectivity
-curl -I http://localhost:5012
+### Legacy Compatibility
 
-# Check port availability
-netstat -tlnp | grep :5012
-```
+The build system maintains backward compatibility for:
+- Volume mount points (`/config`, `/files`)
+- Port configuration (5012)
+- Environment variable names
+- Health check endpoints
 
-## Links
+## Development Guidelines
 
-- **Source Code:** https://ccls.icu/src/repositories/5q12-indexer/main/
-- **Documentation:** https://ccls.icu/src/repositories/5q12-indexer/main/docs/
-- **Releases:** https://ccls.icu/src/repositories/5q12-indexer/releases/
+### Adding New Environment Variables
 
-## Links (GitHub)
+1. Update `init-indexer.sh` environment mapping
+2. Add to build script documentation
+3. Test with fallback methods
+4. Update docker-compose examples
 
-- **Source Code:** https://github.com/5q12-ccls/5q12-s-Indexer
-- **Documentation:** https://github.com/5q12-ccls/5q12-s-Indexer/blob/main/docs/
-- **Issues:** https://github.com/5q12-ccls/5q12-s-Indexer/issues
+### Modifying S6 Services
+
+1. Edit service definitions in `docker/s6-services/`
+2. Ensure proper dependencies are set
+3. Test service startup order
+4. Verify logging and error handling
+
+### Security Considerations
+
+- Always validate input from environment variables
+- Use proper file permissions
+- Test with minimal privileges
+- Regular security updates for base image

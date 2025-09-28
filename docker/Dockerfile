@@ -63,11 +63,28 @@ RUN mkdir -p /www/indexer \
     && mkdir -p /tmp/sessions \
     && chmod 1777 /tmp/sessions
 
+# Add s6-overlay binaries to PATH
+ENV PATH="/command:${PATH}"
+
 # Create s6 service directories
 RUN mkdir -p /etc/s6-overlay/s6-rc.d/nginx/{dependencies.d} \
              /etc/s6-overlay/s6-rc.d/php-fpm/{dependencies.d} \
              /etc/s6-overlay/s6-rc.d/init-indexer \
-             /etc/s6-overlay/s6-rc.d/user/contents.d
+             /etc/s6-overlay/s6-rc.d/user/contents.d \
+             /etc/s6-overlay/s6-rc.d/user2/contents.d
+
+# Copy s6 service definitions
+COPY docker/s6-services/ /etc/s6-overlay/s6-rc.d/
+
+# Set permissions for s6 scripts
+RUN chmod +x /etc/s6-overlay/s6-rc.d/*/run 2>/dev/null || true \
+    && chmod 644 /etc/s6-overlay/s6-rc.d/*/type \
+    && chmod 644 /etc/s6-overlay/s6-rc.d/*/up 2>/dev/null || true
+
+# Set environment variables for s6-overlay
+ENV S6_BEHAVIOUR_IF_STAGE2_FAILS=2
+ENV S6_CMD_WAIT_FOR_SERVICES_MAXTIME=0
+ENV S6_LOGGING=1
 
 # Copy nginx configuration
 COPY docker/nginx.conf /etc/nginx/nginx.conf
@@ -87,6 +104,10 @@ COPY source/config /app/default-config
 
 # Copy s6 service definitions (created by setup script)
 COPY docker/s6-services/ /etc/s6-overlay/s6-rc.d/
+
+# Copy initialization scripts
+COPY docker/scripts/ /docker/scripts/
+RUN chmod +x /docker/scripts/*.sh
 
 # Create symlinks from application paths to mount points
 RUN rm -rf /www/indexer/.indexer_files /www/indexer/files \

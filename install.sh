@@ -91,9 +91,10 @@ should_download_file() {
         return 0
     fi
     
-    # Download 5q12-indexer.conf only from main root
-    if [[ "$filename" == "5q12-indexer.conf" && "$file_url" == "https://ccls.icu/src/repositories/5q12-indexer/main/5q12-indexer.conf/" ]]; then
-        return 0
+    # DO NOT download 5q12-indexer.conf to installation directory
+    # It should only be placed in nginx sites-available directory
+    if [[ "$filename" == "5q12-indexer.conf" ]]; then
+        return 1
     fi
     
     # Download all files from indexer_files/ directory and subdirectories
@@ -409,6 +410,14 @@ check_system_requirements() {
         missing_requirements+=("php")
     fi
     
+    # Check SQLite3 command line tool
+    if ! command -v sqlite3 >/dev/null 2>&1; then
+        log_warning "SQLite3 not found"
+        missing_requirements+=("sqlite3")
+    else
+        log_success "SQLite3 found"
+    fi
+    
     # Check PHP extensions if PHP is available
     if [[ "$php_ok" == "true" ]]; then
         local required_extensions=("json" "fileinfo" "mbstring" "sqlite3" "zip" "curl" "openssl")
@@ -485,6 +494,10 @@ install_dependencies() {
                     sudo systemctl start "$php_service"
                 fi
                 ;;
+            "sqlite3")
+                log_info "Installing SQLite3..."
+                sudo apt install -y sqlite3
+                ;;
             "php-extensions")
                 log_info "Installing PHP extensions..."
                 sudo apt install -y php-mbstring php-sqlite3 php-zip php-curl
@@ -541,6 +554,29 @@ create_nginx_config() {
     return 0
 }
 
+create_script_marker() {
+    local install_path="$1"
+    
+    log_info "Creating script installation marker..."
+    
+    local marker_file="$install_path/.indexer_files/.script"
+    local marker_dir=$(dirname "$marker_file")
+    
+    # Ensure the .indexer_files directory exists
+    if [[ ! -d "$marker_dir" ]]; then
+        sudo mkdir -p "$marker_dir"
+        sudo chown www-data:www-data "$marker_dir"
+        sudo chmod 755 "$marker_dir"
+    fi
+    
+    # Create empty .script file
+    sudo touch "$marker_file"
+    sudo chown www-data:www-data "$marker_file"
+    sudo chmod 644 "$marker_file"
+    
+    log_success "Script marker created: $marker_file"
+}
+
 install_indexer() {
     local install_path="$1"
     
@@ -569,6 +605,9 @@ install_indexer() {
         log_error "Failed to download indexer files"
         return 1
     fi
+    
+    # Create script installation marker
+    create_script_marker "$install_path"
     
     # For fresh installation, just ensure the config file has proper permissions
     local config_file="$install_path/.indexer_files/config.json"
@@ -684,7 +723,7 @@ smart_update_files() {
             local local_path=""
             if [[ $fileurl =~ /indexer_files/(.+)/ ]]; then
                 local_path=".indexer_files/${BASH_REMATCH[1]}"
-            elif [[ $filename == "index.php" || $filename == "5q12-indexer.conf" ]]; then
+            elif [[ $filename == "index.php" ]]; then
                 local_path="$filename"
             else
                 local_path="$filename"
@@ -737,6 +776,9 @@ smart_update_files() {
     done < "$repo_file"
     
     rm -f "$repo_file"
+    
+    # Ensure script marker exists after update
+    create_script_marker "$install_path"
     
     log_success "Update completed: $updated_files files updated, $skipped_files files skipped"
     return 0

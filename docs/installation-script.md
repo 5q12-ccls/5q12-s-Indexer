@@ -37,7 +37,7 @@ The automated installation script is the easiest way to install 5q12's Indexer. 
 
 ```bash
 # Download the installation script
-wget https://ccls.icu/src/test/5q12-indexer/main/install.sh/ -O install.sh
+wget https://ccls.icu/src/repositories/5q12-indexer/main/install.sh/ -O install.sh
 
 # Make it executable
 chmod +x install.sh

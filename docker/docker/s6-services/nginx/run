@@ -1,5 +1,2 @@
 #!/command/execlineb -P
-# Redirect stderr to stdout for proper logging
-fdmove -c 2 1
-# Start nginx in foreground mode
-exec nginx -g "daemon off;"
+nginx -g "daemon off;"

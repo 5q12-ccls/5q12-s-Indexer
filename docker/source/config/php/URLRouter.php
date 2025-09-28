@@ -342,9 +342,9 @@ class URLRouter {
     <link rel="icon" type="image/png" sizes="192x192" href="<?php echo $this->webPath; ?>/.indexer_files/favicon/192x192.png">
     <link rel="apple-touch-icon" sizes="180x180" href="<?php echo $this->webPath; ?>/.indexer_files/favicon/180x180.png">
     <?php if (!$showMarkdown): ?>
-    <link rel="stylesheet" href="<?php echo $this->webPath; ?>/.indexer_files/local_api/style/ecf219b0e59edefbdc0124308ade7358.css">
+    <link rel="stylesheet" href="<?php echo $this->webPath; ?>/.indexer_files/local_api/style/main-AHP32U4e4RN2pMSJ.css">
     <?php endif; ?>
-    <link rel="stylesheet" href="<?php echo $this->webPath; ?>/.indexer_files/local_api/style/923fa1e76151b3d1186753fda67480ce.css">
+    <link rel="stylesheet" href="<?php echo $this->webPath; ?>/.indexer_files/local_api/style/markdown-AHP32U4e4RN2pMSJ.css">
 </head>
 <body>
     <?php if ($isMarkdown): ?>

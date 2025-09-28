@@ -3,15 +3,6 @@ require_once __DIR__ . '/.indexer_files/php/URLRouter.php';
 require_once __DIR__ . '/.indexer_files/php/IndexerCache.php';
 $scriptDir = dirname(__FILE__);
 $baseDir = $scriptDir . '/files';
-$isDockerEnvironment = getenv('DOCKER_ENV') === 'true' || file_exists('/.dockerenv');
-$scriptDir = dirname(__FILE__);
-if ($isDockerEnvironment) {
-    $baseDir = '/files';
-    $indexerFilesDir = '/config';
-} else {
-    $baseDir = $scriptDir . '/files';
-    $indexerFilesDir = $scriptDir . '/.indexer_files';
-}
 $documentRoot = $_SERVER['DOCUMENT_ROOT'];
 $scriptPath = str_replace($documentRoot, '', $scriptDir);
 $webPath = rtrim($scriptPath, '/');
@@ -60,6 +51,86 @@ if (!empty($currentPath)) {
         http_response_code(404);
         exit('Path not found');
     }
+}
+function getVersionInfo() {
+    global $config, $indexerFilesDir;
+    $currentVersion = $config['version'] ?? null;
+    $cache = initializeCache();
+    $cachedVersionData = $cache->get('remote_version_info', 'version');
+    if ($cachedVersionData !== null) {
+        return [
+            'current' => $currentVersion,
+            'remote' => $cachedVersionData['remote_version'],
+            'type' => $cachedVersionData['installation_type']
+        ];
+    }
+    $urls = [
+        'https://raw.githubusercontent.com/5q12-ccls/5q12-s-Indexer/refs/heads/main/repo',
+        'https://ccls.icu/src/repositories/5q12-indexer/main/repo/'
+    ];
+    $context = stream_context_create([
+        'http' => [
+            'timeout' => 10,
+            'user_agent' => '5q12-Indexer',
+            'header' => [
+                'Accept: text/plain, */*',
+                'Cache-Control: no-cache'
+            ]
+        ],
+        'ssl' => [
+            'verify_peer' => false,
+            'verify_peer_name' => false
+        ]
+    ]);
+    $remoteVersion = null;
+    $successfulUrl = null;
+    foreach ($urls as $url) {
+        $response = @file_get_contents($url, false, $context);
+        if ($response !== false) {
+            $lines = preg_split('/\r\n|\r|\n/', $response);
+            if (isset($lines[0]) && preg_match('/^VERSION=(.+)$/', trim($lines[0]), $matches)) {
+                $remoteVersion = trim($matches[1]);
+                $successfulUrl = $url;
+                break;
+            }
+        }
+    }
+    $installationType = file_exists($indexerFilesDir . '/.docker') ? 'docker' :
+                        (file_exists($indexerFilesDir . '/.script') ? 'script' : 'manual');
+    if ($remoteVersion !== null) {
+        $cacheData = [
+            'remote_version' => $remoteVersion,
+            'installation_type' => $installationType,
+            'source_url' => $successfulUrl
+        ];
+        $cache->set('remote_version_info', 'version', $cacheData, 7200);
+    }
+    return [
+        'current' => $currentVersion,
+        'remote' => $remoteVersion,
+        'type' => $installationType
+    ];
+}
+function generateUpdateNotice() {
+    $info = getVersionInfo();
+    if (!$info['remote'] || !version_compare($info['current'], $info['remote'], '<')) {
+        return '';
+    }
+    $instructions = [
+        'docker' => 'Update using Docker: Pull the latest image and restart your container.',
+        'script' => 'Update using the installation script: Run "5q12-index update".',
+        'manual' => 'Manual installation: Download and replace files manually from the repository.'
+    ];
+    $changelogUrl = 'https://ccls.icu/src/repositories/5q12-indexer/releases/latest/changelog.md/?view=default';
+    return '
+    <div class="update-notice">
+        <div class="update-notice-content">
+            <strong>Update Available</strong><br>
+            Current: v' . htmlspecialchars($info['current']) . ' | Latest: v' . htmlspecialchars($info['remote']) . '<br>
+            <small>' . htmlspecialchars($instructions[$info['type']]) . '</small><br>
+            <a href="' . htmlspecialchars($changelogUrl) . '" target="_blank" class="changelog-link">View Changelog</a>
+        </div>
+    </div>';
 }
 function parseDenyAllowList($listString) {
     if (empty(trim($listString))) {
@@ -1066,7 +1137,7 @@ if ($cachedData !== null) {
     <link rel="icon" type="image/png" sizes="144x144" href="<?php echo $webPath; ?>/.indexer_files/favicon/144x144.png">
     <link rel="icon" type="image/png" sizes="192x192" href="<?php echo $webPath; ?>/.indexer_files/favicon/192x192.png">
     <link rel="apple-touch-icon" sizes="180x180" href="<?php echo $webPath; ?>/.indexer_files/favicon/180x180.png">
-    <link rel="stylesheet" href="<?php echo $webPath; ?>/.indexer_files/local_api/style/ecf219b0e59edefbdc0124308ade7358.css">
+    <link rel="stylesheet" href="<?php echo $webPath; ?>/.indexer_files/local_api/style/main-AHP32U4e4RN2pMSJ.css">
 </head>
 <body<?php if ($iconType === 'disabled') echo ' class="icon-disabled"'; ?>>
     <div class="container">
@@ -1237,6 +1308,7 @@ if ($cachedData !== null) {
         $shareFile = $_GET['share_file'];
         echo generateSharePopup($shareType, $shareFile, $currentPath);
     }
+    echo generateUpdateNotice();
     ?>
 </body>
 </html>
