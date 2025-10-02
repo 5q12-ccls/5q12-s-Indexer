@@ -58,8 +58,9 @@ RUN mkdir -p /www/indexer \
     && mkdir -p /run/nginx \
     && mkdir -p /run/php \
     && mkdir -p /config \
-    && mkdir -p /files \
     && mkdir -p /app \
+    && mkdir -p /files \
+    && mkdir -p /container-app \
     && mkdir -p /tmp/sessions \
     && chmod 1777 /tmp/sessions
 
@@ -94,13 +95,15 @@ COPY docker/5q12-indexer.conf /etc/nginx/http.d/default.conf
 COPY docker/php-fpm.conf /usr/local/etc/php-fpm.d/www.conf
 
 # Copy all source files including config and index.php
-COPY source/ /app/source/
+COPY source/ /container-app/source/
 
 # Copy index.php to application directory
 COPY source/index.php /www/indexer/
 
-# Copy default config to container (will be used if no external config mounted)
-COPY source/config /app/default-config
+# Copy default configurations to separate locations
+COPY source/config/config.json /container-app/default-config/
+COPY source/config/config-reference.txt /container-app/default-config/
+COPY source/config/ /container-app/default-app/
 
 # Copy s6 service definitions (created by setup script)
 COPY docker/s6-services/ /etc/s6-overlay/s6-rc.d/
@@ -111,19 +114,21 @@ RUN chmod +x /docker/scripts/*.sh
 
 # Create symlinks from application paths to mount points
 RUN rm -rf /www/indexer/.indexer_files /www/indexer/files \
-    && ln -sf /config /www/indexer/.indexer_files \
+    && ln -sf /app /www/indexer/.indexer_files \
     && ln -sf /files /www/indexer/files
 
 # Set strict permissions for security
 RUN chown -R www-data:www-data /www/indexer \
     && chown -R www-data:www-data /config \
-    && chown -R www-data:www-data /files \
     && chown -R www-data:www-data /app \
+    && chown -R www-data:www-data /files \
+    && chown -R www-data:www-data /container-app \
     && chown -R www-data:www-data /tmp/sessions \
     && chmod +x /etc/s6-overlay/s6-rc.d/*/run 2>/dev/null || true \
     && chmod 644 /www/indexer/index.php \
     && chmod -R 755 /www/indexer \
     && chmod -R 750 /config \
+    && chmod -R 750 /app \
     && chmod -R 755 /files
 
 # Security: Remove unnecessary packages and clean up
@@ -138,7 +143,7 @@ ENV S6_CMD_WAIT_FOR_SERVICES_MAXTIME=0
 ENV S6_LOGGING=1
 
 # Create volume mount points
-VOLUME ["/config", "/files"]
+VOLUME ["/config", "/app", "/files"]
 
 # Expose port 5012
 EXPOSE 5012

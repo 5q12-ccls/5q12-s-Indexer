@@ -1,8 +1,8 @@
 5q12's Indexer - Configuration Reference
 ==========================================
 
-Version: [1.1.19]
-Updated: 2025-09-27
+Version: [1.2.0]
+Updated: 2025-10-02
 
 CONFIGURATION STRUCTURE
 =======================
@@ -73,6 +73,18 @@ Type: Boolean
 Default: false
 Purpose: Removes the Download options from folder action menus
 Requirement: Requires php-zip extension when enabled
+
+Property: main.max_download_size_file
+Type: String
+Default: "2048 MB"
+Purpose: Set the max size for downloadable files using "value MB,GB,TB"
+Use Case: Restrict the size for files available to download
+
+Property: main.max_download_size_folder
+Type: String
+Default: "2048 MB"
+Purpose: Set the max size for downloadable folders using "value MB,GB,TB"
+Use Case: Restrict the size for folders available to download
 
 Display Controls
 ----------------

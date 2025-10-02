@@ -203,7 +203,7 @@
   "iso": "iso.png",
   "txt": "text.png",
   "csv": "text.png",
-  "folder": "folder.png",
+  "folder": "folder-proto.png",
   "ant": "ant-build.png",
   "httpd": "apache-config.png",
   "apache": "apache-config.png",

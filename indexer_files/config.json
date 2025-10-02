@@ -1,11 +1,13 @@
 {
-    "version": "1.1.19-r1",
+    "version": "1.2.0-r0",
     "main": {
         "access_url": "",
         "cache_type": "sqlite",
         "icon_type": "default",
         "disable_file_downloads": false,
         "disable_folder_downloads": false,
+        "max_download_size_folder": "2048 MB",
+        "max_download_size_file": "2048 MB",
         "index_hidden": false,
         "index_all": false,
         "deny_list": "",
@@ -546,7 +548,7 @@
         "index_zap": true
     },
     "viewable_files": {
-        "view_non-descript-files": false,
+        "view_non-descript-files": true,
         "view_php": false,
         "view_js": true,
         "view_md": true,

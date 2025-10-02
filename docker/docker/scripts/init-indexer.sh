@@ -11,47 +11,10 @@ fi
 
 # Ensure mount point directories exist
 mkdir -p /config
+mkdir -p /app
 mkdir -p /files
 
-# Ensure required config subdirectories exist
-echo "Ensuring config subdirectories exist..."
-mkdir -p /config/zip_cache
-mkdir -p /config/index_cache
-mkdir -p /config/icons
-mkdir -p /config/favicon
-
-# CRITICAL: Always force-refresh local_api directory on every startup
-# This ensures backend files are always compatible with current index.php
-echo "Force-refreshing local_api directory (critical backend files)..."
-rm -rf /config/local_api
-
-if [ -d "/app/default-config/local_api" ]; then
-    cp -r /app/default-config/local_api /config/
-    echo "✓ local_api directory refreshed from defaults"
-else
-    # Fallback: create minimal structure if default not found
-    mkdir -p /config/local_api/style
-    echo "⚠ Created minimal local_api structure (default not found)"
-fi
-
-# CRITICAL: Always force-refresh php directory on every startup
-# This ensures PHP class files are always compatible with current index.php
-echo "Force-refreshing php directory (critical PHP class files)..."
-rm -rf /config/php
-
-if [ -d "/app/default-config/php" ]; then
-    cp -r /app/default-config/php /config/
-    echo "✓ php directory refreshed from defaults"
-else
-    # Fallback: create minimal structure if default not found
-    mkdir -p /config/php
-    echo "⚠ Created minimal php structure (default not found)"
-fi
-
-# Handle config.json with version checking and field merging
-echo "Checking config.json version and updating if needed..."
-
-# Function to merge JSON configs using jq-like shell operations
+# Function to merge JSON configs using PHP
 merge_config_json() {
     existing_config="$1"
     default_config="$2"
@@ -113,7 +76,13 @@ MERGE_EOF
     return $merge_result
 }
 
-if [ -f "/app/default-config/config.json" ]; then
+# ================================================================
+# HANDLE CONFIG MOUNT (config.json and config-reference.txt only)
+# ================================================================
+echo "Setting up /config mount (config files only)..."
+
+# Handle config.json
+if [ -f "/container-app/default-config/config.json" ]; then
     if [ -f "/config/config.json" ]; then
         echo "Existing config.json found, checking for updates..."
         
@@ -121,12 +90,12 @@ if [ -f "/app/default-config/config.json" ]; then
         cp /config/config.json /config/config.json.backup
         
         # Attempt to merge configs
-        if merge_config_json "/config/config.json" "/app/default-config/config.json" "/config/config.json.new"; then
+        if merge_config_json "/config/config.json" "/container-app/default-config/config.json" "/config/config.json.new"; then
             # Replace the existing config with merged version
             mv /config/config.json.new /config/config.json
-            echo "✓ Config.json updated with missing fields and latest version"
+            echo "Config.json updated with missing fields and latest version"
         else
-            echo "⚠ Config merge failed, keeping existing config.json"
+            echo "Config merge failed, keeping existing config.json"
             # Restore backup if merge failed
             if [ -f "/config/config.json.backup" ]; then
                 mv /config/config.json.backup /config/config.json
@@ -137,21 +106,142 @@ if [ -f "/app/default-config/config.json" ]; then
         rm -f /config/config.json.new /config/config.json.backup
     else
         echo "No existing config.json, copying default..."
-        cp /app/default-config/config.json /config/config.json
-        echo "✓ Default config.json copied"
+        cp /container-app/default-config/config.json /config/config.json
+        echo "Default config.json copied"
     fi
 else
-    echo "⚠ No default config.json found"
-    
-    # Create minimal config.json if neither exists
-    if [ ! -f "/config/config.json" ]; then
-        echo "ERROR: No config.json found and no default available!"
-        echo "This should not happen in a properly built container."
-        exit 1
+    echo "ERROR: No default config.json found at /container-app/default-config/"
+    exit 1
+fi
+
+# Handle config-reference.txt
+if [ -f "/container-app/default-config/config-reference.txt" ]; then
+    if [ ! -f "/config/config-reference.txt" ]; then
+        echo "Copying config-reference.txt..."
+        cp /container-app/default-config/config-reference.txt /config/config-reference.txt
     fi
 fi
 
-# Process environment variables and update config.json
+# ================================================================
+# HANDLE APP MOUNT (icons, favicon, local_api, php, etc.)
+# ================================================================
+echo "Setting up /app mount (application files)..."
+
+# Ensure critical app directories exist
+mkdir -p /app/zip_cache
+mkdir -p /app/index_cache
+mkdir -p /app/icons
+mkdir -p /app/favicon
+
+# CRITICAL: Always force-refresh local_api directory on every startup
+# This ensures backend files are always compatible with current index.php
+echo "Force-refreshing local_api directory (critical backend files)..."
+rm -rf /app/local_api
+
+if [ -d "/container-app/default-app/local_api" ]; then
+    cp -r /container-app/default-app/local_api /app/
+    echo "local_api directory refreshed from defaults"
+else
+    # Fallback: create minimal structure if default not found
+    mkdir -p /app/local_api/style
+    echo "Created minimal local_api structure (default not found)"
+fi
+
+# CRITICAL: Always force-refresh php directory on every startup
+# This ensures PHP class files are always compatible with current index.php
+echo "Force-refreshing php directory (critical PHP class files)..."
+rm -rf /app/php
+
+if [ -d "/container-app/default-app/php" ]; then
+    cp -r /container-app/default-app/php /app/
+    echo "php directory refreshed from defaults"
+else
+    # Fallback: create minimal structure if default not found
+    mkdir -p /app/php
+    echo "Created minimal php structure (default not found)"
+fi
+
+# Handle other app files - preserve existing, copy missing
+if [ -d "/container-app/default-app" ]; then
+    echo "Checking for other missing app files..."
+    
+    # Create a temporary file list to avoid subshell issues with the while loop
+    temp_file_list="/tmp/default_app_files.txt"
+    find /container-app/default-app -type f > "$temp_file_list"
+    
+    # Read the file list line by line
+    while IFS= read -r src_file; do
+        # Skip empty lines
+        [ -z "$src_file" ] && continue
+        
+        # Get relative path from default app root
+        rel_path="${src_file#/container-app/default-app/}"
+        dst_file="/app/$rel_path"
+        
+        # Skip files we've already handled or config files
+        case "$rel_path" in
+            local_api/*|php/*|config.json|config-reference.txt)
+                continue
+                ;;
+        esac
+        
+        # Copy file if it doesn't exist in destination
+        if [ ! -f "$dst_file" ]; then
+            echo "Copying missing app file: $rel_path"
+            # Ensure destination directory exists
+            dst_dir="$(dirname "$dst_file")"
+            mkdir -p "$dst_dir"
+            
+            # Copy the file and verify
+            if cp "$src_file" "$dst_file"; then
+                echo "  Successfully copied: $rel_path"
+                chown www-data:www-data "$dst_file"
+            else
+                echo "  Failed to copy: $rel_path"
+            fi
+        fi
+    done < "$temp_file_list"
+    
+    # Clean up temp file
+    rm -f "$temp_file_list"
+    
+    echo "Application files check completed"
+else
+    echo "Warning: No default app found at /container-app/default-app"
+fi
+
+# ================================================================
+# CREATE CONFIG SYMLINKS IN APP DIRECTORY
+# ================================================================
+echo "Creating config symlinks in /app for PHP application access..."
+
+# Remove any existing config files/symlinks in /app
+rm -f /app/config.json
+rm -f /app/config-reference.txt
+
+# Create symlinks from /app to /config for the config files
+# This allows PHP app to access config via .indexer_files symlink
+if [ -f "/config/config.json" ]; then
+    ln -sf /config/config.json /app/config.json
+    if [ -L "/app/config.json" ]; then
+        echo "  /app/config.json -> /config/config.json"
+    else
+        echo "ERROR: Failed to create config.json symlink"
+        exit 1
+    fi
+else
+    echo "ERROR: /config/config.json does not exist"
+    exit 1
+fi
+
+if [ -f "/config/config-reference.txt" ]; then
+    ln -sf /config/config-reference.txt /app/config-reference.txt
+    echo "  /app/config-reference.txt -> /config/config-reference.txt"
+fi
+
+# ================================================================
+# ENVIRONMENT VARIABLE PROCESSING
+# ================================================================
 echo "Processing environment variable overrides..."
 
 # Enhanced debugging - check multiple environment sources
@@ -261,7 +351,7 @@ function getAllIndexerVars() {
     // Known environment variables to check
     $knownVars = [
         'INDEXER_ACCESS_URL', 'INDEXER_CACHE_TYPE', 'INDEXER_ICON_TYPE',
-        'INDEXER_DISABLE_FILE_DOWNLOADS', 'INDEXER_DISABLE_FOLDER_DOWNLOADS',
+        'INDEXER_DISABLE_FILE_DOWNLOADS', 'INDEXER_DISABLE_FOLDER_DOWNLOADS', 'INDEXER_MAX_DOWNLOAD_SIZE_FOLDER', 'INDEXER_MAX_DOWNLOAD_SIZE_FILE',
         'INDEXER_INDEX_HIDDEN', 'INDEXER_INDEX_ALL', 'INDEXER_DENY_LIST', 'INDEXER_ALLOW_LIST'
     ];
     
@@ -334,6 +424,8 @@ $envMappings = [
     'INDEXER_ICON_TYPE' => ['main', 'icon_type'],
     'INDEXER_DISABLE_FILE_DOWNLOADS' => ['main', 'disable_file_downloads'],
     'INDEXER_DISABLE_FOLDER_DOWNLOADS' => ['main', 'disable_folder_downloads'],
+    'INDEXER_MAX_DOWNLOAD_SIZE_FOLDER' => ['main', 'max_download_size_folder'],
+    'INDEXER_MAX_DOWNLOAD_SIZE_FILE' => ['main', 'max_download_size_file'],
     'INDEXER_INDEX_HIDDEN' => ['main', 'index_hidden'],
     'INDEXER_INDEX_ALL' => ['main', 'index_all'],
     'INDEXER_DENY_LIST' => ['main', 'deny_list'],
@@ -365,7 +457,7 @@ foreach ($envMappings as $envVar => $configPath) {
         
         if ($originalValue !== $value) {
             $config[$configPath[0]][$configPath[1]] = $value;
-            echo "✓ Updated {$configPath[0]}.{$configPath[1]}: " . json_encode($originalValue) . " -> " . json_encode($value) . "\n";
+            echo "Updated {$configPath[0]}.{$configPath[1]}: " . json_encode($originalValue) . " -> " . json_encode($value) . "\n";
             $changes++;
         } else {
             echo "  {$configPath[0]}.{$configPath[1]} already set to: " . json_encode($value) . "\n";
@@ -403,7 +495,7 @@ foreach ($allEnvVars as $envVar => $value) {
                 
                 if ($originalValue !== $boolValue) {
                     $config['exclusions'][$tryKey] = $boolValue;
-                    echo "✓ Updated exclusions.$tryKey: " . json_encode($originalValue) . " -> " . json_encode($boolValue) . "\n";
+                    echo "Updated exclusions.$tryKey: " . json_encode($originalValue) . " -> " . json_encode($boolValue) . "\n";
                     $changes++;
                 }
                 $keyFound = true;
@@ -412,7 +504,7 @@ foreach ($allEnvVars as $envVar => $value) {
         }
         
         if (!$keyFound) {
-            echo "⚠ Warning: Unknown filetype '$filetype' (raw: '$rawFiletype') for indexing (env: $envVar)\n";
+            echo "Warning: Unknown filetype '$filetype' (raw: '$rawFiletype') for indexing (env: $envVar)\n";
             echo "  Tried keys: " . implode(', ', $possibleKeys) . "\n";
             if (isset($config['exclusions'])) {
                 $availableKeys = array_filter(array_keys($config['exclusions']), function($k) { return strpos($k, 'index_') === 0; });
@@ -449,7 +541,7 @@ foreach ($allEnvVars as $envVar => $value) {
                 
                 if ($originalValue !== $boolValue) {
                     $config['viewable_files'][$tryKey] = $boolValue;
-                    echo "✓ Updated viewable_files.$tryKey: " . json_encode($originalValue) . " -> " . json_encode($boolValue) . "\n";
+                    echo "Updated viewable_files.$tryKey: " . json_encode($originalValue) . " -> " . json_encode($boolValue) . "\n";
                     $changes++;
                 }
                 $keyFound = true;
@@ -458,7 +550,7 @@ foreach ($allEnvVars as $envVar => $value) {
         }
         
         if (!$keyFound) {
-            echo "⚠ Warning: Unknown filetype '$filetype' (raw: '$rawFiletype') for viewing (env: $envVar)\n";
+            echo "Warning: Unknown filetype '$filetype' (raw: '$rawFiletype') for viewing (env: $envVar)\n";
             echo "  Tried keys: " . implode(', ', $possibleKeys) . "\n";
             if (isset($config['viewable_files'])) {
                 $availableKeys = array_filter(array_keys($config['viewable_files']), function($k) { return strpos($k, 'view_') === 0; });
@@ -475,7 +567,7 @@ if ($changes > 0) {
         echo "Error: Could not write updated config.json\n";
         exit(1);
     }
-    echo "✓ Applied $changes environment variable overrides to config.json\n";
+    echo "Applied $changes environment variable overrides to config.json\n";
 } else {
     echo "No environment variable changes applied (all values already correct or no vars found)\n";
 }
@@ -498,76 +590,20 @@ ENV_EOF
     rm -f /tmp/process_env_config.php /tmp/indexer_env_vars.txt /tmp/indexer_env_source.sh
     
     if [ $env_result -eq 0 ]; then
-        echo "✓ Environment variable processing completed successfully"
+        echo "Environment variable processing completed successfully"
     else
-        echo "⚠ Warning: Environment variable processing failed with exit code $env_result"
+        echo "Warning: Environment variable processing failed with exit code $env_result"
     fi
 else
     echo "Warning: config.json not found, skipping environment variable processing"
 fi
 
-# Handle other configuration files - preserve existing, copy missing
-if [ -d "/app/default-config" ]; then
-    echo "Checking for other missing configuration files..."
-    
-    # Create a temporary file list to avoid subshell issues with the while loop
-    temp_file_list="/tmp/default_config_files.txt"
-    find /app/default-config -type f > "$temp_file_list"
-    
-    # Read the file list line by line
-    while IFS= read -r src_file; do
-        # Skip empty lines
-        [ -z "$src_file" ] && continue
-        
-        # Get relative path from default config root
-        rel_path="${src_file#/app/default-config/}"
-        dst_file="/config/$rel_path"
-        
-        # Skip files we've already handled
-        case "$rel_path" in
-            local_api/*|php/*|config.json)
-                continue
-                ;;
-        esac
-        
-        # Copy file if it doesn't exist in destination
-        if [ ! -f "$dst_file" ]; then
-            echo "Copying missing file: $rel_path"
-            # Ensure destination directory exists
-            dst_dir="$(dirname "$dst_file")"
-            mkdir -p "$dst_dir"
-            
-            # Copy the file and verify
-            if cp "$src_file" "$dst_file"; then
-                echo "  ✓ Successfully copied: $rel_path"
-                chown www-data:www-data "$dst_file"
-            else
-                echo "  ✗ Failed to copy: $rel_path"
-            fi
-        fi
-    done < "$temp_file_list"
-    
-    # Clean up temp file
-    rm -f "$temp_file_list"
-    
-    echo "✓ Configuration files check completed"
-else
-    echo "⚠ Warning: No default config found at /app/default-config"
-fi
-
-# Ensure critical directories exist with proper ownership - POSIX compliant version
-critical_dirs="/config/zip_cache /config/index_cache /config/icons /config/favicon /config/local_api /config/php"
-
-for dir in $critical_dirs; do
-    if [ ! -d "$dir" ]; then
-        echo "Creating missing critical directory: $dir"
-        mkdir -p "$dir"
-    fi
-    chown www-data:www-data "$dir"
-done
+# ================================================================
+# SETUP MAIN SYMLINKS
+# ================================================================
+echo "Setting up main symlinks..."
 
 # Remove existing symlinks/directories if they exist and aren't symlinks
-echo "Setting up symlinks..."
 if [ -d "/www/indexer/.indexer_files" ] && [ ! -L "/www/indexer/.indexer_files" ]; then
     rm -rf /www/indexer/.indexer_files
 fi
@@ -584,104 +620,137 @@ if [ -L "/www/indexer/files" ]; then
 fi
 
 # Create symlinks
-ln -sf /config /www/indexer/.indexer_files
+ln -sf /app /www/indexer/.indexer_files
 ln -sf /files /www/indexer/files
 
-echo "Symlinks created:"
-echo "  /www/indexer/.indexer_files -> /config"
+echo "Main symlinks created:"
+echo "  /www/indexer/.indexer_files -> /app"
 echo "  /www/indexer/files -> /files"
 
-# Set proper ownership for all directories
+# ================================================================
+# SET PERMISSIONS
+# ================================================================
 echo "Setting proper ownership..."
 chown -R www-data:www-data /config
-chown -R www-data:www-data /files
+chown -R www-data:www-data /app
+chown -R www-data:www-data /files 2>/dev/null || echo "  Note: /files is read-only (expected)"
 chown -R www-data:www-data /www/indexer
 
-# Verify symlinks
-echo "Verifying symlinks..."
+# ================================================================
+# VERIFY SETUP
+# ================================================================
+echo "Verifying setup..."
+
+# Verify main symlinks
 if [ -L "/www/indexer/.indexer_files" ]; then
-    echo "✓ .indexer_files symlink created successfully"
+    echo "  .indexer_files symlink: OK -> $(readlink /www/indexer/.indexer_files)"
 else
-    echo "✗ Failed to create .indexer_files symlink"
+    echo "  ERROR: .indexer_files symlink failed"
     exit 1
 fi
 
 if [ -L "/www/indexer/files" ]; then
-    echo "✓ files symlink created successfully"
+    echo "  files symlink: OK -> $(readlink /www/indexer/files)"
 else
-    echo "✗ Failed to create files symlink"
+    echo "  ERROR: files symlink failed"
+    exit 1
+fi
+
+# Verify config symlinks
+if [ -L "/app/config.json" ]; then
+    echo "  config.json symlink: OK -> $(readlink /app/config.json)"
+else
+    echo "  ERROR: config.json symlink failed"
+    exit 1
+fi
+
+# Verify PHP can read config through the symlink chain
+if [ -f "/www/indexer/.indexer_files/config.json" ]; then
+    echo "  config.json accessible via .indexer_files: OK"
+else
+    echo "  ERROR: config.json not accessible via .indexer_files"
     exit 1
 fi
 
 # Test nginx configuration
 echo "Testing nginx configuration..."
 if nginx -t; then
-    echo "✓ Nginx configuration test passed"
+    echo "  Nginx configuration: OK"
 else
-    echo "✗ Nginx configuration test failed!"
+    echo "  ERROR: Nginx configuration test failed"
     exit 1
 fi
 
 # Test PHP-FPM configuration
 echo "Testing PHP-FPM configuration..."
 if php-fpm -t; then
-    echo "✓ PHP-FPM configuration test passed"
+    echo "  PHP-FPM configuration: OK"
 else
-    echo "✗ PHP-FPM configuration test failed!"
+    echo "  ERROR: PHP-FPM configuration test failed"
     exit 1
 fi
 
-# Display container information
+# ================================================================
+# DISPLAY CONTAINER INFORMATION
+# ================================================================
 echo ""
 echo "5q12's Indexer Container Information:"
 echo "====================================="
-echo "Environment: Docker with S6-Overlay"
+echo "Environment: Docker with S6-Overlay (Split Mount Configuration)"
 echo "Index.php location: /www/indexer/index.php"
-echo "Config directory: /config (mounted)"
-echo "Files directory: /files (mounted)"
+echo "Config directory: /config (config.json, config-reference.txt)"
+echo "App directory: /app (icons, favicon, local_api, php, caches + config symlinks)"
+echo "Files directory: /files (mounted read-only)"
 echo "Nginx port: 5012"
 echo "Version: 1.1.19"
 echo ""
-echo "Volume mounts should be:"
-echo "  -v /host/config:/config"
-echo "  -v /host/files:/files"
+echo "Volume mounts:"
+echo "  /config - Contains: config.json, config-reference.txt"
+echo "  /app    - Contains: icons, favicon, local_api, php, caches (+ symlinks to config)"
+echo "  /files  - Contains: files to be indexed (read-only)"
 echo ""
 echo "Configuration status:"
+
 if [ -f "/config/config.json" ]; then
-    # Try to extract version from config.json
     if command -v php >/dev/null 2>&1; then
         current_version=$(php -r "
             \$config = json_decode(file_get_contents('/config/config.json'), true);
             echo isset(\$config['version']) ? \$config['version'] : 'unknown';
         " 2>/dev/null || echo "unknown")
-        echo "  ✓ config.json: Present (version: $current_version)"
+        echo "  config.json: Present (version: $current_version)"
     else
-        echo "  ✓ config.json: Present"
+        echo "  config.json: Present"
     fi
 else
-    echo "  ✗ config.json: Missing"
+    echo "  config.json: Missing"
 fi
 
-if [ -d "/config/local_api" ]; then
-    echo "  ✓ local_api: Refreshed"
+if [ -f "/config/config-reference.txt" ]; then
+    echo "  config-reference.txt: Present"
 else
-    echo "  ✗ local_api: Missing"
+    echo "  config-reference.txt: Missing"
 fi
 
-if [ -d "/config/php" ]; then
-    echo "  ✓ php: Refreshed"
+if [ -d "/app/local_api" ]; then
+    echo "  local_api: Refreshed"
 else
-    echo "  ✗ php: Missing"
+    echo "  local_api: Missing"
 fi
 
-if [ -d "/config/zip_cache" ]; then
-    echo "  ✓ zip_cache: Ready"
+if [ -d "/app/php" ]; then
+    echo "  php: Refreshed"
+else
+    echo "  php: Missing"
 fi
 
-if [ -d "/config/index_cache" ]; then
-    echo "  ✓ index_cache: Ready"
+if [ -d "/app/zip_cache" ]; then
+    echo "  zip_cache: Ready"
+fi
+
+if [ -d "/app/index_cache" ]; then
+    echo "  index_cache: Ready"
 fi
 
 echo ""
-echo "✓ 5q12's Indexer initialization completed successfully!"
+echo "5q12's Indexer initialization completed successfully!"
 echo "Starting services: nginx + php-fpm"

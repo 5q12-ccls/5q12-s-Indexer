@@ -1,6 +1,8 @@
 <?php
 require_once __DIR__ . '/.indexer_files/php/URLRouter.php';
 require_once __DIR__ . '/.indexer_files/php/IndexerCache.php';
+require_once __DIR__ . '/.indexer_files/php/Markdown.php';
+require_once __DIR__ . '/.indexer_files/php/CodeHighlight.php';
 $scriptDir = dirname(__FILE__);
 $baseDir = $scriptDir . '/files';
 $documentRoot = $_SERVER['DOCUMENT_ROOT'];
@@ -51,6 +53,23 @@ if (!empty($currentPath)) {
         http_response_code(404);
         exit('Path not found');
     }
+}
+function getSecurityStatus() {
+    global $config;
+    $isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') 
+                || $_SERVER['SERVER_PORT'] == 443
+                || (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https');
+    $hostname = '';
+    if (isset($config['main']['access_url']) && !empty($config['main']['access_url'])) {
+        $parsedUrl = parse_url($config['main']['access_url']);
+        $hostname = $parsedUrl['host'] ?? $_SERVER['HTTP_HOST'];
+    } else {
+        $hostname = $_SERVER['HTTP_HOST'];
+    }
+    return [
+        'secure' => $isHttps,
+        'hostname' => $hostname
+    ];
 }
 function getVersionInfo() {
     global $config, $indexerFilesDir;
@@ -510,7 +529,7 @@ function getIconPath($type, $extension = '') {
         return null;
     }
     if ($iconType === 'minimal') {
-        $iconFilename = ($type === 'folder') ? 'folder.png' : 'non-descript-default-file.png';
+        $iconFilename = ($type === 'folder') ? 'folder-proto.png' : 'non-descript-default-file.png';
         $iconPath = $iconsDir . '/' . $iconFilename;
         if (file_exists($iconPath)) {
             $relativePath = str_replace($scriptDir, '', $iconPath);
@@ -562,7 +581,7 @@ function getIconFromLocal($type, $extension = '') {
     global $iconsDir;
     $iconMappings = loadLocalIconMappings();
     if ($type === 'folder') {
-        $iconFile = isset($iconMappings['folder']) ? $iconMappings['folder'] : 'folder.png';
+        $iconFile = isset($iconMappings['folder']) ? $iconMappings['folder'] : 'folder-proto.png';
     } else {
         $extension = strtolower($extension);
         $iconFile = isset($iconMappings[$extension]) ? $iconMappings[$extension] : 'non-descript-default-file.png';
@@ -570,7 +589,7 @@ function getIconFromLocal($type, $extension = '') {
     $iconPath = $iconsDir . '/' . $iconFile;
     if (!file_exists($iconPath)) {
         if ($type === 'folder') {
-            $iconFile = 'folder.png';
+            $iconFile = 'folder-proto.png';
         } else {
             $iconFile = 'non-descript-default-file.png';
         }
@@ -780,7 +799,8 @@ function getFileActionMenu($file, $currentPath) {
     $fileName = $file['name'];
     $isViewable = isFileViewable($extension);
     $showActions = isset($_GET['action']) && $_GET['action'] === $fileName;
-    $menu = '<div class="item-actions-menu">';
+    $anchorId = 'file-' . preg_replace('/[^a-zA-Z0-9-_]/', '-', $fileName);
+    $menu = '<div class="item-actions-menu" id="' . htmlspecialchars($anchorId) . '">';
     if ($showActions) {
         $closeParams = $_GET;
         unset($closeParams['action']);
@@ -789,6 +809,7 @@ function getFileActionMenu($file, $currentPath) {
         if ($closeParams) {
             $closeUrl .= '?' . http_build_query($closeParams);
         }
+        $closeUrl .= '#' . $anchorId;
         $menu .= '<a href="' . $closeUrl . '" class="actions-toggle">×</a>';
         $menu .= '<div class="actions-dropdown">';
         if ($isViewable) {
@@ -818,7 +839,7 @@ function getFileActionMenu($file, $currentPath) {
         }
         $actionParams['action'] = $fileName;
         $actionUrl = $router->generateFolderURL($currentPath, '', 'view');
-        $actionUrl .= '?' . http_build_query($actionParams);
+        $actionUrl .= '?' . http_build_query($actionParams) . '#' . $anchorId;
         $menu .= '<a href="' . $actionUrl . '" class="actions-toggle">⋯</a>';
     }
     $menu .= '</div>';
@@ -828,7 +849,8 @@ function getFolderActionMenu($folder, $currentPath) {
     global $disableFolderDownloads, $router, $webPath;
     $folderName = $folder['name'];
     $showActions = isset($_GET['action']) && $_GET['action'] === $folderName;
-    $menu = '<div class="item-actions-menu">';
+    $anchorId = 'folder-' . preg_replace('/[^a-zA-Z0-9-_]/', '-', $folderName);
+    $menu = '<div class="item-actions-menu" id="' . htmlspecialchars($anchorId) . '">';
     if ($showActions) {
         $closeParams = $_GET;
         unset($closeParams['action']);
@@ -837,6 +859,7 @@ function getFolderActionMenu($folder, $currentPath) {
         if ($closeParams) {
             $closeUrl .= '?' . http_build_query($closeParams);
         }
+        $closeUrl .= '#' . $anchorId;
         $menu .= '<a href="' . $closeUrl . '" class="actions-toggle">×</a>';
         $menu .= '<div class="actions-dropdown">';
         $openUrl = $router->generateFolderURL($currentPath, $folderName, 'view');
@@ -864,7 +887,7 @@ function getFolderActionMenu($folder, $currentPath) {
         }
         $actionParams['action'] = $folderName;
         $actionUrl = $router->generateFolderURL($currentPath, '', 'view');
-        $actionUrl .= '?' . http_build_query($actionParams);
+        $actionUrl .= '?' . http_build_query($actionParams) . '#' . $anchorId;
         $menu .= '<a href="' . $actionUrl . '" class="actions-toggle">⋯</a>';
     }
     $menu .= '</div>';
@@ -915,138 +938,6 @@ function getSortIndicator($column, $currentSort, $currentDir) {
         return '';
     }
     return $currentDir === 'asc' ? ' ↑' : ' ↓';
-}
-function parseMarkdown($text) {
-    $text = str_replace(["\r\n", "\r"], "\n", $text);
-    $codeBlocks = [];
-    $inlineCodes = [];
-    $text = preg_replace_callback('/```([a-zA-Z0-9\-_]*)\n?(.*?)\n?```/s', function($matches) use (&$codeBlocks) {
-        $id = count($codeBlocks);
-        $placeholder = "XCODEBLOCKREPLACEX" . $id . "XCODEBLOCKREPLACEX";
-        $codeBlocks[$placeholder] = trim($matches[2]);
-        return "\n" . $placeholder . "\n";
-    }, $text);
-    $text = preg_replace_callback('/`([^`\n]+?)`/', function($matches) use (&$inlineCodes) {
-        $id = count($inlineCodes);
-        $placeholder = "XINLINECODEREPLACEX" . $id . "XINLINECODEREPLACEX";
-        $inlineCodes[$placeholder] = $matches[1];
-        return $placeholder;
-    }, $text);
-    $text = htmlspecialchars($text, ENT_QUOTES, 'UTF-8');
-    $text = preg_replace('/^###### (.+?)$/m', '<h6>$1</h6>', $text);
-    $text = preg_replace('/^##### (.+?)$/m', '<h5>$1</h5>', $text);
-    $text = preg_replace('/^#### (.+?)$/m', '<h4>$1</h4>', $text);
-    $text = preg_replace('/^### (.+?)$/m', '<h3>$1</h3>', $text);
-    $text = preg_replace('/^## (.+?)$/m', '<h2>$1</h2>', $text);
-    $text = preg_replace('/^# (.+?)$/m', '<h1>$1</h1>', $text);
-    $text = preg_replace('/!\[([^\]]*?)\]\(([^)]+?)\)/', '<img src="$2" alt="$1" class="markdown-img">', $text);
-    $text = preg_replace('/\[([^\]]+?)\]\(([^)]+?)\)/', '<a href="$2" class="markdown-link">$1</a>', $text);
-    $text = preg_replace('/(?<!XINLINECODEREPLACEX)\*\*\*([^*\n]+?)\*\*\*(?!XINLINECODEREPLACEX)/', '<strong><em>$1</em></strong>', $text);
-    $text = preg_replace('/(?<!XINLINECODEREPLACEX)\*\*([^*\n]+?)\*\*(?!XINLINECODEREPLACEX)/', '<strong>$1</strong>', $text);
-    $text = preg_replace('/(?<!XINLINECODEREPLACEX)(?<!\*)\*([^*\n]+?)\*(?!\*)(?!XINLINECODEREPLACEX)/', '<em>$1</em>', $text);
-    $text = preg_replace('/(?<!XINLINECODEREPLACEX)___([^_\n]+?)___(?!XINLINECODEREPLACEX)/', '<strong><em>$1</em></strong>', $text);
-    $text = preg_replace('/(?<!XINLINECODEREPLACEX)(?<!_)__([^_\n]+?)__(?!_)(?!XINLINECODEREPLACEX)/', '<strong>$1</strong>', $text);
-    $text = preg_replace('/(?<!XINLINECODEREPLACEX)(?<!_)_([^_\n]+?)_(?!_)(?!XINLINECODEREPLACEX)/', '<em>$1</em>', $text);
-    $text = preg_replace('/~~([^~\n]+?)~~/', '<del>$1</del>', $text);
-    $text = preg_replace('/^\s*---\s*$/m', '<hr class="markdown-hr">', $text);
-    $text = preg_replace('/^\s*\*\*\*\s*$/m', '<hr class="markdown-hr">', $text);
-    $text = preg_replace('/^&gt; (.+?)$/m', '<blockquote class="markdown-blockquote">$1</blockquote>', $text);
-    $text = preg_replace('/^(\s*)[\*\-\+] (.+?)$/m', '$1<li class="markdown-li">$2</li>', $text);
-    $text = preg_replace('/^(\s*)\d+\. (.+?)$/m', '$1<li class="markdown-li markdown-li-ordered">$2</li>', $text);
-    $lines = explode("\n", $text);
-    $result = [];
-    $inList = false;
-    $listType = '';
-    $lastWasListItem = false;
-    foreach ($lines as $line) {
-        if (preg_match('/^(\s*)<li class="markdown-li( markdown-li-ordered)?"/', $line, $matches)) {
-            $isOrdered = !empty($matches[2]);
-            $newListType = $isOrdered ? 'ol' : 'ul';
-            if (!$inList) {
-                $result[] = "<$newListType class=\"markdown-list\">";
-                $listType = $newListType;
-                $inList = true;
-            } elseif ($listType !== $newListType) {
-                if (!($listType === 'ol' && $newListType === 'ol')) {
-                    $result[] = "</$listType>";
-                    $result[] = "<$newListType class=\"markdown-list\">";
-                    $listType = $newListType;
-                }
-            }
-            $result[] = $line;
-            $lastWasListItem = true;
-        } else {
-            if ($inList && trim($line) === '' && $lastWasListItem) {
-                $lastWasListItem = false;
-                continue;
-            }
-            if ($inList && trim($line) !== '') {
-                $result[] = "</$listType>";
-                $inList = false;
-            }
-            if (trim($line) !== '') {
-                $result[] = $line;
-                $lastWasListItem = false;
-            }
-        }
-    }
-    if ($inList) {
-        $result[] = "</$listType>";
-    }
-    $text = implode("\n", $result);
-    $text = preg_replace_callback('/(?:^\|.+\|\s*$\n?)+/m', function($matches) {
-        $table = trim($matches[0]);
-        $rows = explode("\n", $table);
-        $html = '<table class="markdown-table">';
-        $isHeader = true;
-        foreach ($rows as $row) {
-            if (empty(trim($row))) continue;
-            if (preg_match('/^\|[\s\-\|:]+\|$/', $row)) {
-                $isHeader = false;
-                continue;
-            }
-            $cells = explode('|', trim($row, '|'));
-            $cells = array_map('trim', $cells);
-            $tag = $isHeader ? 'th' : 'td';
-            $class = $isHeader ? 'markdown-th' : 'markdown-td';
-            $html .= '<tr class="markdown-tr">';
-            foreach ($cells as $cell) {
-                $html .= "<$tag class=\"$class\">$cell</$tag>";
-            }
-            $html .= '</tr>';
-            if ($isHeader) $isHeader = false;
-        }
-        $html .= '</table>';
-        return $html;
-    }, $text);
-    $paragraphs = preg_split('/\n\s*\n/', $text);
-    $result = [];
-    foreach ($paragraphs as $paragraph) {
-        $paragraph = trim($paragraph);
-        if (empty($paragraph)) continue;
-        if (preg_match('/^XCODEBLOCKREPLACEX\d+XCODEBLOCKREPLACEX$/', $paragraph)) {
-            $result[] = $paragraph;
-        }
-        elseif (preg_match('/^<(h[1-6]|ul|ol|blockquote|pre|hr|table|div)/i', $paragraph)) {
-            $result[] = $paragraph;
-        }
-        else {
-            $paragraph = preg_replace('/\n(?!<)/', '<br>', $paragraph);
-            $result[] = '<p class="markdown-p">' . $paragraph . '</p>';
-        }
-    }
-    $text = implode("\n\n", $result);
-    foreach ($codeBlocks as $placeholder => $content) {
-        $escapedContent = htmlspecialchars($content, ENT_QUOTES, 'UTF-8');
-        $codeHtml = '<pre class="code-block"><code>' . $escapedContent . '</code></pre>';
-        $text = str_replace($placeholder, $codeHtml, $text);
-    }
-    foreach ($inlineCodes as $placeholder => $content) {
-        $escapedContent = htmlspecialchars($content, ENT_QUOTES, 'UTF-8');
-        $codeHtml = '<code class="inline-code">' . $escapedContent . '</code>';
-        $text = str_replace($placeholder, $codeHtml, $text);
-    }
-    return $text;
 }
 function getAbsoluteUrl($relativeUrl) {
     global $config;
@@ -1122,6 +1013,50 @@ if ($cachedData !== null) {
         'files' => $files
     ]);
 }
+function parseSizeString($sizeString) {
+    if (empty($sizeString) || !is_string($sizeString)) {
+        return null;
+    } 
+    $sizeString = trim(strtoupper($sizeString));
+    if (preg_match('/^(\d+(?:\.\d+)?)\s*(KB|MB|GB|TB|B)?$/', $sizeString, $matches)) {
+        $number = floatval($matches[1]);
+        $unit = isset($matches[2]) ? $matches[2] : 'B';
+        $multipliers = [
+            'B' => 1,
+            'KB' => 1024,
+            'MB' => 1024 * 1024,
+            'GB' => 1024 * 1024 * 1024,
+            'TB' => 1024 * 1024 * 1024 * 1024
+        ];
+        if (isset($multipliers[$unit])) {
+            return intval($number * $multipliers[$unit]);
+        }
+    }
+    return null;
+}
+function getMaxDownloadSize($type) {
+    global $config;
+    if ($type === 'file') {
+        $defaultSize = 2 * 1024 * 1024 * 1024;
+    } else {
+        $defaultSize = 50 * 1024 * 1024;
+    }
+    $configKey = ($type === 'file') ? 'max_download_size_file' : 'max_download_size_folder';
+    if (isset($config['main'][$configKey])) {
+        $parsedSize = parseSizeString($config['main'][$configKey]);
+        return $parsedSize !== null ? $parsedSize : $defaultSize;
+    }
+    return $defaultSize;
+}
+function formatSizeForError($bytes) {
+    $units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    $i = 0;
+    while ($bytes >= 1024 && $i < count($units) - 1) {
+        $bytes /= 1024;
+        $i++;
+    }
+    return round($bytes, 1) . ' ' . $units[$i];
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -1137,9 +1072,22 @@ if ($cachedData !== null) {
     <link rel="icon" type="image/png" sizes="144x144" href="<?php echo $webPath; ?>/.indexer_files/favicon/144x144.png">
     <link rel="icon" type="image/png" sizes="192x192" href="<?php echo $webPath; ?>/.indexer_files/favicon/192x192.png">
     <link rel="apple-touch-icon" sizes="180x180" href="<?php echo $webPath; ?>/.indexer_files/favicon/180x180.png">
-    <link rel="stylesheet" href="<?php echo $webPath; ?>/.indexer_files/local_api/style/main-AHP32U4e4RN2pMSJ.css">
+    <link rel="stylesheet" href="<?php echo $webPath; ?>/.indexer_files/local_api/style/base-1.2.0.min.css">
+    <link rel="stylesheet" href="<?php echo $webPath; ?>/.indexer_files/local_api/style/index-1.2.0.min.css">
 </head>
 <body<?php if ($iconType === 'disabled') echo ' class="icon-disabled"'; ?>>
+    <?php
+    $securityStatus = getSecurityStatus();
+    $lockIcon = $securityStatus['secure'] 
+        ? $webPath . '/.indexer_files/icons/app/green.png'
+        : $webPath . '/.indexer_files/icons/app/red.png';
+    ?>
+    <div class="security-bar">
+        <span class="security-lock" data-tooltip="<?php echo $securityStatus['secure'] ? 'Connection is secure (HTTPS)' : 'Connection is not secure - Consider using HTTPS'; ?>">
+            <img src="<?php echo htmlspecialchars($lockIcon); ?>" alt="<?php echo $securityStatus['secure'] ? 'Secure' : 'Not Secure'; ?>">
+        </span>
+        <span class="security-hostname"><?php echo htmlspecialchars($securityStatus['hostname']); ?></span>
+    </div>
     <div class="container">
         <div class="header">
             <h1><?php echo empty($currentPath) ? '5q12-Indexer' : '5q12-Indexer: /' . htmlspecialchars(basename($currentPath)); ?></h1>

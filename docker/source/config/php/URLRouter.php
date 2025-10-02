@@ -128,6 +128,14 @@ class URLRouter {
             exit('File not accessible');
         }
         if (isset($_GET['download'])) {
+            $fileSize = filesize($fullPath);
+            $maxSize = getMaxDownloadSize('file');
+            if ($fileSize > $maxSize) {
+                http_response_code(413);
+                $fileSizeFormatted = formatSizeForError($fileSize);
+                $maxSizeFormatted = formatSizeForError($maxSize);
+                exit("File too large for download. File size: {$fileSizeFormatted}, Maximum allowed: {$maxSizeFormatted}");
+            }
             $this->handleFileDownload($fullPath, $filename);
         }
         $viewType = isset($_GET['view']) ? $_GET['view'] : 'raw';
@@ -213,6 +221,14 @@ class URLRouter {
             exit('Folder not accessible');
         }
         if (isset($_GET['download']) && $_GET['download'] === 'archive') {
+            $folderSize = getDirectorySize($fullPath);
+            $maxSize = getMaxDownloadSize('folder');
+            if ($folderSize > $maxSize) {
+                http_response_code(413);
+                $folderSizeFormatted = formatSizeForError($folderSize);
+                $maxSizeFormatted = formatSizeForError($maxSize);
+                exit("Folder too large for download. Folder size: {$folderSizeFormatted}, Maximum allowed: {$maxSizeFormatted}");
+            }
             $folderName = basename($currentPath);
             if (empty($folderName)) {
                 $folderName = 'files';
@@ -257,21 +273,36 @@ class URLRouter {
         fclose($handle);
         exit;
     }
-    private function handleFileView($fullPath, $filename, $extension, $viewMode = 'default') {
-        $fileContent = file_get_contents($fullPath);
-        $fileName = htmlspecialchars($filename);
-        $directServeExtensions = [
-            'pdf', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'jfif', 'avif', 'ico', 
-            'cur', 'tiff', 'bmp', 'heic', 'svg', 'mp4', 'mkv', 'mp3', 'aac', 
-            'flac', 'm4a', 'ogg', 'opus', 'wma', 'mov', 'webm', 'wmv', '3gp', 
-            'flv', 'm4v', 'docx', 'xlsx'
-        ];
-        if (in_array($extension, $directServeExtensions)) {
-            $this->serveFileDirect($fullPath, $extension, $filename);
-        } else {
-            $this->serveFileAsText($fileContent, $filename, $extension, $viewMode);
-        }
+private function handleFileView($fullPath, $filename, $extension, $viewMode = 'default') {
+    global $currentPath;
+    $relativePath = $currentPath ? $currentPath . '/' . $filename : $filename;
+    $fileModTime = filemtime($fullPath);
+    $cacheKey = 'fileview_' . md5($relativePath . '_' . $viewMode . '_' . $fileModTime);
+    $cache = initializeCache();
+    $cachedOutput = $cache->get($cacheKey, 'fileview');
+    if ($cachedOutput !== null) {
+        echo $cachedOutput;
+        exit;
     }
+    $fileContent = file_get_contents($fullPath);
+    $fileName = htmlspecialchars($filename);
+    $directServeExtensions = [
+        'pdf', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'jfif', 'avif', 'ico', 
+        'cur', 'tiff', 'bmp', 'heic', 'svg', 'mp4', 'mkv', 'mp3', 'aac', 
+        'flac', 'm4a', 'ogg', 'opus', 'wma', 'mov', 'webm', 'wmv', '3gp', 
+        'flv', 'm4v', 'docx', 'xlsx'
+    ];
+    if (in_array($extension, $directServeExtensions)) {
+        $this->serveFileDirect($fullPath, $extension, $filename);
+    } else {
+        ob_start();
+        $this->serveFileAsText($fileContent, $filename, $extension, $viewMode);
+        $output = ob_get_clean();
+        $cache->set($cacheKey, 'fileview', $output, 3600);
+        echo $output;
+        exit;
+    }
+}
     private function serveFileDirect($fullPath, $extension, $filename) {
         $mimeTypes = [
             'pdf' => 'application/pdf',
@@ -317,85 +348,19 @@ class URLRouter {
         $markdownExtensions = ['md', 'markdown'];
         $isMarkdown = in_array($extension, $markdownExtensions);
         $showMarkdown = false;
+        $showCode = false;
         if ($viewMode === 'default' && $isMarkdown) {
             $showMarkdown = true;
         } elseif ($viewMode === 'markdown' && $isMarkdown) {
             $showMarkdown = true;
+        } elseif ($viewMode === 'default' || $viewMode === 'code') {
+            $showCode = CodeHighlight::isSupported($extension, $filename);
         }
         $showRaw = isset($_GET['raw']) && $_GET['raw'] === '1';
         if ($showRaw) {
             $showMarkdown = false;
+            $showCode = false;
         }
-        ?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?php echo $filename; ?></title>
-    <link rel="icon" type="image/x-icon" href="<?php echo $this->webPath; ?>/.indexer_files/favicon/icon.ico">
-    <link rel="icon" type="image/png" sizes="16x16" href="<?php echo $this->webPath; ?>/.indexer_files/favicon/16x16.png">
-    <link rel="icon" type="image/png" sizes="32x32" href="<?php echo $this->webPath; ?>/.indexer_files/favicon/32x32.png">
-    <link rel="icon" type="image/png" sizes="48x48" href="<?php echo $this->webPath; ?>/.indexer_files/favicon/48x48.png">
-    <link rel="icon" type="image/png" sizes="96x96" href="<?php echo $this->webPath; ?>/.indexer_files/favicon/96x96.png">
-    <link rel="icon" type="image/png" sizes="144x144" href="<?php echo $this->webPath; ?>/.indexer_files/favicon/144x144.png">
-    <link rel="icon" type="image/png" sizes="192x192" href="<?php echo $this->webPath; ?>/.indexer_files/favicon/192x192.png">
-    <link rel="apple-touch-icon" sizes="180x180" href="<?php echo $this->webPath; ?>/.indexer_files/favicon/180x180.png">
-    <?php if (!$showMarkdown): ?>
-    <link rel="stylesheet" href="<?php echo $this->webPath; ?>/.indexer_files/local_api/style/main-AHP32U4e4RN2pMSJ.css">
-    <?php endif; ?>
-    <link rel="stylesheet" href="<?php echo $this->webPath; ?>/.indexer_files/local_api/style/markdown-AHP32U4e4RN2pMSJ.css">
-</head>
-<body>
-    <?php if ($isMarkdown): ?>
-        <?php if ($showRaw): ?>
-            <a href="<?php echo $_SERVER['REQUEST_URI']; ?>" class="view-raw-button">View Markdown</a>
-            <pre><?php echo htmlspecialchars($fileContent); ?></pre>
-        <?php elseif ($showMarkdown): ?>
-            <?php
-            $currentUrl = $_SERVER['REQUEST_URI'];
-            $baseUrlParts = parse_url($currentUrl);
-            $baseUrl = $baseUrlParts['path'];
-            $currentParams = [];
-            if (isset($baseUrlParts['query'])) {
-                parse_str($baseUrlParts['query'], $currentParams);
-            }
-            $viewButtons = '';
-            $rawParams = array_merge($currentParams, ['view' => 'raw']);
-            unset($rawParams['raw']);
-            $viewButtons .= '<a href="' . $baseUrl . '?' . http_build_query($rawParams) . '" class="view-raw-button" target="_blank">View Raw</a>';
-            if ($viewMode !== 'code') {
-                $codeParams = array_merge($currentParams, ['view' => 'code']);
-                unset($codeParams['raw']);
-                $viewButtons .= '<a href="' . $baseUrl . '?' . http_build_query($codeParams) . '" class="view-raw-button" style="right: 120px;">View Code</a>';
-            }
-            echo $viewButtons;
-            ?>
-            <div class="markdown-content">
-                <?php echo parseMarkdown($fileContent); ?>
-            </div>
-        <?php else: ?>
-            <?php
-            $currentUrl = $_SERVER['REQUEST_URI'];
-            $baseUrlParts = parse_url($currentUrl);
-            $baseUrl = $baseUrlParts['path'];
-            $currentParams = [];
-            if (isset($baseUrlParts['query'])) {
-                parse_str($baseUrlParts['query'], $currentParams);
-            }
-            $viewButtons = '';
-            $rawParams = array_merge($currentParams, ['view' => 'raw']);
-            unset($rawParams['raw']);
-            $viewButtons .= '<a href="' . $baseUrl . '?' . http_build_query($rawParams) . '" class="view-raw-button" target="_blank">View Raw</a>';
-            $markdownParams = array_merge($currentParams, ['view' => 'default']);
-            unset($markdownParams['raw']);
-            $viewButtons .= '<a href="' . $baseUrl . '?' . http_build_query($markdownParams) . '" class="view-raw-button" style="right: 120px;">View Markdown</a>';
-            echo $viewButtons;
-            ?>
-            <pre><?php echo htmlspecialchars($fileContent); ?></pre>
-        <?php endif; ?>
-    <?php else: ?>
-        <?php
         $currentUrl = $_SERVER['REQUEST_URI'];
         $baseUrlParts = parse_url($currentUrl);
         $baseUrl = $baseUrlParts['path'];
@@ -403,16 +368,103 @@ class URLRouter {
         if (isset($baseUrlParts['query'])) {
             parse_str($baseUrlParts['query'], $currentParams);
         }
-        $rawParams = array_merge($currentParams, ['view' => 'raw']);
-        unset($rawParams['raw']);
-        echo '<a href="' . $baseUrl . '?' . http_build_query($rawParams) . '" class="view-raw-button" target="_blank">View Raw</a>';
         ?>
-        <pre><?php echo htmlspecialchars($fileContent); ?></pre>
-    <?php endif; ?>
-</body>
-</html>
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title><?php echo $filename; ?></title>
+            <link rel="icon" type="image/x-icon" href="<?php echo $this->webPath; ?>/.indexer_files/favicon/icon.ico">
+            <link rel="icon" type="image/png" sizes="16x16" href="<?php echo $this->webPath; ?>/.indexer_files/favicon/16x16.png">
+            <link rel="icon" type="image/png" sizes="32x32" href="<?php echo $this->webPath; ?>/.indexer_files/favicon/32x32.png">
+            <link rel="icon" type="image/png" sizes="48x48" href="<?php echo $this->webPath; ?>/.indexer_files/favicon/48x48.png">
+            <link rel="icon" type="image/png" sizes="96x96" href="<?php echo $this->webPath; ?>/.indexer_files/favicon/96x96.png">
+            <link rel="icon" type="image/png" sizes="144x144" href="<?php echo $this->webPath; ?>/.indexer_files/favicon/144x144.png">
+            <link rel="icon" type="image/png" sizes="192x192" href="<?php echo $this->webPath; ?>/.indexer_files/favicon/192x192.png">
+            <link rel="apple-touch-icon" sizes="180x180" href="<?php echo $this->webPath; ?>/.indexer_files/favicon/180x180.png">
+            <link rel="stylesheet" href="<?php echo $this->webPath; ?>/.indexer_files/local_api/style/base-1.2.0.min.css">
+            <?php if ($showMarkdown): ?>
+            <link rel="stylesheet" href="<?php echo $this->webPath; ?>/.indexer_files/local_api/style/viewer-markdown-1.2.0.min.css">
+            <?php elseif ($showCode): ?>
+            <link rel="stylesheet" href="<?php echo $this->webPath; ?>/.indexer_files/local_api/style/viewer-code-1.2.0.min.css">
+            <link rel="stylesheet" href="<?php echo $this->webPath; ?>/.indexer_files/local_api/style/atom-one-dark.min.css">
+            <?php else: ?>
+            <link rel="stylesheet" href="<?php echo $this->webPath; ?>/.indexer_files/local_api/style/viewer-code-1.2.0.min.css">
+            <link rel="stylesheet" href="<?php echo $this->webPath; ?>/.indexer_files/local_api/style/atom-one-dark.min.css">
+            <?php endif; ?>
+        </head>
+        <body>
+            <?php
+            $securityStatus = getSecurityStatus();
+            $lockIcon = $securityStatus['secure'] 
+                ? $this->webPath . '/.indexer_files/icons/app/green.png'
+                : $this->webPath . '/.indexer_files/icons/app/red.png';
+            ?>
+            <div class="security-bar">
+                <span class="security-lock" data-tooltip="<?php echo $securityStatus['secure'] ? 'Connection is secure (HTTPS)' : 'Connection is not secure - Consider using HTTPS'; ?>">
+                    <img src="<?php echo htmlspecialchars($lockIcon); ?>" alt="<?php echo $securityStatus['secure'] ? 'Secure' : 'Not Secure'; ?>">
+                </span>
+                <div class="security-bar-filename"><?php echo htmlspecialchars($filename); ?></div>
+                <div class="security-bar-buttons">
+                    <?php if ($isMarkdown): ?>
+                        <?php
+                        $rawParams = array_merge($currentParams, ['view' => 'raw']);
+                        unset($rawParams['raw']);
+                        $rawUrl = $baseUrl . '?' . http_build_query($rawParams);
+                        $isRawActive = ($viewMode === 'raw');
+                        ?>
+                        <a href="<?php echo $rawUrl; ?>" class="security-bar-btn<?php echo $isRawActive ? ' active' : ''; ?>">Raw</a>
+                        <?php
+                        $codeParams = array_merge($currentParams, ['view' => 'code']);
+                        unset($codeParams['raw']);
+                        $codeUrl = $baseUrl . '?' . http_build_query($codeParams);
+                        $isCodeActive = ($viewMode === 'code');
+                        ?>
+                        <a href="<?php echo $codeUrl; ?>" class="security-bar-btn<?php echo $isCodeActive ? ' active' : ''; ?>">Code</a>
+                        <?php
+                        $markdownParams = array_merge($currentParams, ['view' => 'default']);
+                        unset($markdownParams['raw']);
+                        $markdownUrl = $baseUrl . '?' . http_build_query($markdownParams);
+                        $isMarkdownActive = ($viewMode === 'default' || $viewMode === 'markdown');
+                        ?>
+                        <a href="<?php echo $markdownUrl; ?>" class="security-bar-btn<?php echo $isMarkdownActive ? ' active' : ''; ?>">Markdown</a>
+                    <?php else: ?>
+                        <?php
+                        $rawParams = array_merge($currentParams, ['view' => 'raw']);
+                        unset($rawParams['raw']);
+                        $rawUrl = $baseUrl . '?' . http_build_query($rawParams);
+                        $isRawActive = ($viewMode === 'raw');
+                        ?>
+                        <a href="<?php echo $rawUrl; ?>" class="security-bar-btn<?php echo $isRawActive ? ' active' : ''; ?>">Raw</a>
+                        <?php
+                        $codeParams = array_merge($currentParams, ['view' => 'code']);
+                        unset($codeParams['raw']);
+                        $codeUrl = $baseUrl . '?' . http_build_query($codeParams);
+                        $isCodeActive = ($viewMode === 'code' || $viewMode === 'default');
+                        ?>
+                        <a href="<?php echo $codeUrl; ?>" class="security-bar-btn<?php echo $isCodeActive ? ' active' : ''; ?>">Code</a>
+                    <?php endif; ?>
+                </div>
+            </div>
+            <?php if ($isMarkdown): ?>
+                <?php if ($showRaw): ?>
+                    <pre><?php echo htmlspecialchars($fileContent); ?></pre>
+                <?php elseif ($showMarkdown): ?>
+                    <div class="markdown-content">
+                        <?php echo Markdown::parse($fileContent); ?>
+                    </div>
+                <?php else: ?>
+                    <pre><?php echo htmlspecialchars($fileContent); ?></pre>
+                <?php endif; ?>
+            <?php elseif ($showCode): ?>
+                <?php echo CodeHighlight::render($fileContent, $extension, $filename); ?>
+            <?php else: ?>
+                <pre><?php echo htmlspecialchars($fileContent); ?></pre>
+            <?php endif; ?>
+        </body>
+        </html>
         <?php
-        exit;
     }
     private function handleFolderDownload($fullPath, $folderName) {
         global $disableFolderDownloads, $zipCacheDir;

@@ -1,18 +1,18 @@
 services:
   5q12-indexer:
-    image: 5q12/5q12-indexer:dev0-1.1.19-r1
-    container_name: 5q12-indexer-dev-1.1.19-r1
+    image: 5q12/5q12-indexer:dev-1.2.0
+    container_name: 5q12-indexer-dev
     restart: unless-stopped
     ports:
-      - "5012:5012"  # Different port to avoid conflicts
+      - "5012:5012"
     environment:
       - TZ=Etc/UTC
-      - S6_VERBOSITY=2  # Add verbose logging for testing
-      - INDEXER_CACHE_TYPE=json
+      - INDEXER_CACHE_TYPE=sqlite
       - INDEXER_ICON_TYPE=disabled
       - INDEXER_INDEX_ALL=true
       - INDEXER_VIEW_FILETYPE_PHP=true
       - INDEXER_VIEW_FILETYPE_NON-DESCRIPT-FILES=true
     volumes:
-      - /projects/test/config:/config  # Separate config dir for testing
-      - /projects/test/files:/files:ro
+      - /projects/5q12-indexer/test/config:/config  # Separate config dir for testing
+      - /projects/5q12-indexer/test/app:/app
+      - /projects/5q12-indexer/test/files:/files:ro
