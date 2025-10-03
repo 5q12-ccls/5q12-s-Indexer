@@ -1,5 +1,5 @@
 {
-    "version": "1.2.0-r0",
+    "version": "1.2.0-r1",
     "main": {
         "access_url": "",
         "cache_type": "sqlite",

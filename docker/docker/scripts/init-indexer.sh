@@ -77,7 +77,7 @@ MERGE_EOF
 }
 
 # ================================================================
-# HANDLE CONFIG MOUNT (config.json and config-reference.txt only)
+# HANDLE CONFIG MOUNT (config.json and config-reference.txt)
 # ================================================================
 echo "Setting up /config mount (config files only)..."
 
@@ -107,7 +107,7 @@ if [ -f "/container-app/default-config/config.json" ]; then
     else
         echo "No existing config.json, copying default..."
         cp /container-app/default-config/config.json /config/config.json
-        echo "Default config.json copied"
+        echo "Default config.json copied to /config"
     fi
 else
     echo "ERROR: No default config.json found at /container-app/default-config/"
@@ -115,17 +115,20 @@ else
 fi
 
 # Handle config-reference.txt
+echo "Setting up config-reference.txt..."
+rm -f /config/config-reference.txt
+
 if [ -f "/container-app/default-config/config-reference.txt" ]; then
-    if [ ! -f "/config/config-reference.txt" ]; then
-        echo "Copying config-reference.txt..."
-        cp /container-app/default-config/config-reference.txt /config/config-reference.txt
-    fi
+    cp /container-app/default-config/config-reference.txt /config/config-reference.txt
+    echo "config-reference.txt copied to /config"
+else
+    echo "Warning: No default config-reference.txt found at /container-app/default-config/"
 fi
 
 # ================================================================
 # HANDLE APP MOUNT (icons, favicon, local_api, php, etc.)
 # ================================================================
-echo "Setting up /app mount (application files)..."
+echo "Setting up /app mount (application files, excluding config files)..."
 
 # Ensure critical app directories exist
 mkdir -p /app/zip_cache
@@ -161,9 +164,9 @@ else
     echo "Created minimal php structure (default not found)"
 fi
 
-# Handle other app files - preserve existing, copy missing
+# Handle other app files - preserve existing, copy missing (EXCLUDING config files)
 if [ -d "/container-app/default-app" ]; then
-    echo "Checking for other missing app files..."
+    echo "Checking for other missing app files (excluding config files)..."
     
     # Create a temporary file list to avoid subshell issues with the while loop
     temp_file_list="/tmp/default_app_files.txt"
@@ -208,35 +211,6 @@ if [ -d "/container-app/default-app" ]; then
     echo "Application files check completed"
 else
     echo "Warning: No default app found at /container-app/default-app"
-fi
-
-# ================================================================
-# CREATE CONFIG SYMLINKS IN APP DIRECTORY
-# ================================================================
-echo "Creating config symlinks in /app for PHP application access..."
-
-# Remove any existing config files/symlinks in /app
-rm -f /app/config.json
-rm -f /app/config-reference.txt
-
-# Create symlinks from /app to /config for the config files
-# This allows PHP app to access config via .indexer_files symlink
-if [ -f "/config/config.json" ]; then
-    ln -sf /config/config.json /app/config.json
-    if [ -L "/app/config.json" ]; then
-        echo "  /app/config.json -> /config/config.json"
-    else
-        echo "ERROR: Failed to create config.json symlink"
-        exit 1
-    fi
-else
-    echo "ERROR: /config/config.json does not exist"
-    exit 1
-fi
-
-if [ -f "/config/config-reference.txt" ]; then
-    ln -sf /config/config-reference.txt /app/config-reference.txt
-    echo "  /app/config-reference.txt -> /config/config-reference.txt"
 fi
 
 # ================================================================
@@ -619,13 +593,63 @@ if [ -L "/www/indexer/files" ]; then
     rm /www/indexer/files
 fi
 
-# Create symlinks
-ln -sf /app /www/indexer/.indexer_files
+# Create main directory for .indexer_files (not a symlink, actual directory)
+mkdir -p /www/indexer/.indexer_files
+
+# Symlink files directory
 ln -sf /files /www/indexer/files
 
-echo "Main symlinks created:"
-echo "  /www/indexer/.indexer_files -> /app"
+echo "Main directory and symlinks created:"
+echo "  /www/indexer/.indexer_files/ (directory for individual symlinks)"
 echo "  /www/indexer/files -> /files"
+
+# ================================================================
+# SYMLINK APP CONTENTS TO .indexer_files
+# ================================================================
+echo "Symlinking /app contents to .indexer_files..."
+
+# Symlink all contents from /app to .indexer_files
+if [ -d "/app" ]; then
+    for item in /app/*; do
+        if [ -e "$item" ]; then
+            item_name=$(basename "$item")
+            target_link="/www/indexer/.indexer_files/$item_name"
+            
+            # Remove existing symlink/file if it exists
+            rm -rf "$target_link"
+            
+            # Create symlink
+            ln -sf "$item" "$target_link"
+            echo "  $item_name -> $item"
+        fi
+    done
+else
+    echo "Warning: /app directory not found"
+fi
+
+# ================================================================
+# SYMLINK CONFIG CONTENTS TO .indexer_files
+# ================================================================
+echo "Symlinking /config contents to .indexer_files..."
+
+# Symlink all contents from /config to .indexer_files
+if [ -d "/config" ]; then
+    for item in /config/*; do
+        if [ -e "$item" ]; then
+            item_name=$(basename "$item")
+            target_link="/www/indexer/.indexer_files/$item_name"
+            
+            # Remove existing symlink/file if it exists
+            rm -rf "$target_link"
+            
+            # Create symlink
+            ln -sf "$item" "$target_link"
+            echo "  $item_name -> $item"
+        fi
+    done
+else
+    echo "Warning: /config directory not found"
+fi
 
 # ================================================================
 # SET PERMISSIONS
@@ -641,14 +665,7 @@ chown -R www-data:www-data /www/indexer
 # ================================================================
 echo "Verifying setup..."
 
-# Verify main symlinks
-if [ -L "/www/indexer/.indexer_files" ]; then
-    echo "  .indexer_files symlink: OK -> $(readlink /www/indexer/.indexer_files)"
-else
-    echo "  ERROR: .indexer_files symlink failed"
-    exit 1
-fi
-
+# Verify files directory symlink
 if [ -L "/www/indexer/files" ]; then
     echo "  files symlink: OK -> $(readlink /www/indexer/files)"
 else
@@ -656,20 +673,41 @@ else
     exit 1
 fi
 
-# Verify config symlinks
-if [ -L "/app/config.json" ]; then
-    echo "  config.json symlink: OK -> $(readlink /app/config.json)"
+# Verify .indexer_files is a directory
+if [ -d "/www/indexer/.indexer_files" ] && [ ! -L "/www/indexer/.indexer_files" ]; then
+    echo "  .indexer_files: OK (directory with individual symlinks)"
+else
+    echo "  ERROR: .indexer_files should be a directory, not a symlink"
+    exit 1
+fi
+
+# Verify config.json symlink
+if [ -L "/www/indexer/.indexer_files/config.json" ]; then
+    echo "  config.json symlink: OK -> $(readlink /www/indexer/.indexer_files/config.json)"
 else
     echo "  ERROR: config.json symlink failed"
     exit 1
 fi
 
-# Verify PHP can read config through the symlink chain
-if [ -f "/www/indexer/.indexer_files/config.json" ]; then
-    echo "  config.json accessible via .indexer_files: OK"
+# Verify config-reference.txt symlink
+if [ -L "/www/indexer/.indexer_files/config-reference.txt" ]; then
+    echo "  config-reference.txt symlink: OK -> $(readlink /www/indexer/.indexer_files/config-reference.txt)"
 else
-    echo "  ERROR: config.json not accessible via .indexer_files"
+    echo "  Warning: config-reference.txt symlink not found"
+fi
+
+# Verify source files exist
+if [ -f "/config/config.json" ]; then
+    echo "  /config/config.json: OK (source of truth)"
+else
+    echo "  ERROR: /config/config.json missing"
     exit 1
+fi
+
+if [ -f "/config/config-reference.txt" ]; then
+    echo "  /config/config-reference.txt: OK"
+else
+    echo "  Warning: /config/config-reference.txt missing"
 fi
 
 # Test nginx configuration
@@ -696,18 +734,29 @@ fi
 echo ""
 echo "5q12's Indexer Container Information:"
 echo "====================================="
-echo "Environment: Docker with S6-Overlay (Split Mount Configuration)"
+echo "Environment: Docker with S6-Overlay (Individual Symlink Configuration)"
 echo "Index.php location: /www/indexer/index.php"
-echo "Config directory: /config (config.json, config-reference.txt)"
-echo "App directory: /app (icons, favicon, local_api, php, caches + config symlinks)"
+echo "Config directory: /config (config.json, config-reference.txt - source of truth)"
+echo "App directory: /app (icons, favicon, local_api, php, caches - NO config files)"
 echo "Files directory: /files (mounted read-only)"
+echo ".indexer_files: Individual symlinks to both /config and /app contents"
 echo "Nginx port: 5012"
-echo "Version: 1.1.19"
+echo "Version: 1.2.0-r1"
 echo ""
 echo "Volume mounts:"
-echo "  /config - Contains: config.json, config-reference.txt"
-echo "  /app    - Contains: icons, favicon, local_api, php, caches (+ symlinks to config)"
+echo "  /config - Contains: config.json, config-reference.txt (source of truth)"
+echo "  /app    - Contains: icons, favicon, local_api, php, caches (NO config files)"
 echo "  /files  - Contains: files to be indexed (read-only)"
+echo ""
+echo "Symlink structure:"
+echo "  /www/indexer/.indexer_files/ (directory)"
+echo "    ├── config.json -> /config/config.json"
+echo "    ├── config-reference.txt -> /config/config-reference.txt"
+echo "    ├── icons -> /app/icons"
+echo "    ├── favicon -> /app/favicon"
+echo "    ├── local_api -> /app/local_api"
+echo "    ├── php -> /app/php"
+echo "    └── (all other /app contents)"
 echo ""
 echo "Configuration status:"
 
@@ -717,16 +766,16 @@ if [ -f "/config/config.json" ]; then
             \$config = json_decode(file_get_contents('/config/config.json'), true);
             echo isset(\$config['version']) ? \$config['version'] : 'unknown';
         " 2>/dev/null || echo "unknown")
-        echo "  config.json: Present (version: $current_version)"
+        echo "  config.json: Present in /config (version: $current_version)"
     else
-        echo "  config.json: Present"
+        echo "  config.json: Present in /config"
     fi
 else
     echo "  config.json: Missing"
 fi
 
 if [ -f "/config/config-reference.txt" ]; then
-    echo "  config-reference.txt: Present"
+    echo "  config-reference.txt: Present in /config"
 else
     echo "  config-reference.txt: Missing"
 fi
@@ -753,4 +802,3 @@ fi
 
 echo ""
 echo "5q12's Indexer initialization completed successfully!"
-echo "Starting services: nginx + php-fpm"

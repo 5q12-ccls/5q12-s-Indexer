@@ -210,8 +210,11 @@ class CodeHighlight {
         try {
             $result = $highlighter->highlight($language, $code);
             $highlightedCode = $result->value;
-            $originalLines = preg_split('/\r\n|\r|\n/', $code);
-            $lineCount = count($originalLines);
+            $displayLines = preg_split('/\r\n|\r|\n/', $highlightedCode);
+            $lineCount = count($displayLines);
+            if (end($displayLines) === '') {
+                $lineCount--;
+            }
             $lineNumbers = '';
             for ($i = 1; $i <= $lineCount; $i++) {
                 $lineNumbers .= '<span>' . $i . '</span>';
@@ -224,15 +227,18 @@ class CodeHighlight {
                 '</div>';
         } catch (\Exception $e) {
             $escapedCode = htmlspecialchars($code);
-            $originalLines = preg_split('/\r\n|\r|\n/', $code);
-            $lineCount = count($originalLines);
+            $displayLines = preg_split('/\r\n|\r|\n/', $escapedCode);
+            $lineCount = count($displayLines);
+            if (end($displayLines) === '') {
+                $lineCount--;
+            }
             $lineNumbers = '';
             for ($i = 1; $i <= $lineCount; $i++) {
                 $lineNumbers .= '<span>' . $i . '</span>';
             }
             return '<div class="code-viewer-wrapper">' .
                 '<div class="line-numbers">' . $lineNumbers . '</div>' .
-                '<pre class="code-block"><code>' . 
+                '<pre class="code-block"><code class="hljs">' . 
                 $escapedCode . '</code></pre>' .
                 '</div>';
         }

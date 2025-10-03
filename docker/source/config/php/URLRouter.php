@@ -273,36 +273,36 @@ class URLRouter {
         fclose($handle);
         exit;
     }
-private function handleFileView($fullPath, $filename, $extension, $viewMode = 'default') {
-    global $currentPath;
-    $relativePath = $currentPath ? $currentPath . '/' . $filename : $filename;
-    $fileModTime = filemtime($fullPath);
-    $cacheKey = 'fileview_' . md5($relativePath . '_' . $viewMode . '_' . $fileModTime);
-    $cache = initializeCache();
-    $cachedOutput = $cache->get($cacheKey, 'fileview');
-    if ($cachedOutput !== null) {
-        echo $cachedOutput;
-        exit;
+    private function handleFileView($fullPath, $filename, $extension, $viewMode = 'default') {
+        global $currentPath;
+        $relativePath = $currentPath ? $currentPath . '/' . $filename : $filename;
+        $fileModTime = filemtime($fullPath);
+        $cacheKey = 'fileview_' . md5($relativePath . '_' . $viewMode . '_' . $fileModTime);
+        $cache = initializeCache();
+        $cachedOutput = $cache->get($cacheKey, 'fileview');
+        if ($cachedOutput !== null) {
+            echo $cachedOutput;
+            exit;
+        }
+        $fileContent = file_get_contents($fullPath);
+        $fileName = htmlspecialchars($filename);
+        $directServeExtensions = [
+            'pdf', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'jfif', 'avif', 'ico', 
+            'cur', 'tiff', 'bmp', 'heic', 'svg', 'mp4', 'mkv', 'mp3', 'aac', 
+            'flac', 'm4a', 'ogg', 'opus', 'wma', 'mov', 'webm', 'wmv', '3gp', 
+            'flv', 'm4v', 'docx', 'xlsx'
+        ];
+        if (in_array($extension, $directServeExtensions)) {
+            $this->serveFileDirect($fullPath, $extension, $filename);
+        } else {
+            ob_start();
+            $this->serveFileAsText($fileContent, $filename, $extension, $viewMode);
+            $output = ob_get_clean();
+            $cache->set($cacheKey, 'fileview', $output, 3600);
+            echo $output;
+            exit;
+        }
     }
-    $fileContent = file_get_contents($fullPath);
-    $fileName = htmlspecialchars($filename);
-    $directServeExtensions = [
-        'pdf', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'jfif', 'avif', 'ico', 
-        'cur', 'tiff', 'bmp', 'heic', 'svg', 'mp4', 'mkv', 'mp3', 'aac', 
-        'flac', 'm4a', 'ogg', 'opus', 'wma', 'mov', 'webm', 'wmv', '3gp', 
-        'flv', 'm4v', 'docx', 'xlsx'
-    ];
-    if (in_array($extension, $directServeExtensions)) {
-        $this->serveFileDirect($fullPath, $extension, $filename);
-    } else {
-        ob_start();
-        $this->serveFileAsText($fileContent, $filename, $extension, $viewMode);
-        $output = ob_get_clean();
-        $cache->set($cacheKey, 'fileview', $output, 3600);
-        echo $output;
-        exit;
-    }
-}
     private function serveFileDirect($fullPath, $extension, $filename) {
         $mimeTypes = [
             'pdf' => 'application/pdf',
@@ -353,8 +353,8 @@ private function handleFileView($fullPath, $filename, $extension, $viewMode = 'd
             $showMarkdown = true;
         } elseif ($viewMode === 'markdown' && $isMarkdown) {
             $showMarkdown = true;
-        } elseif ($viewMode === 'default' || $viewMode === 'code') {
-            $showCode = CodeHighlight::isSupported($extension, $filename);
+        } else {
+            $showCode = true;
         }
         $showRaw = isset($_GET['raw']) && $_GET['raw'] === '1';
         if ($showRaw) {
@@ -386,11 +386,8 @@ private function handleFileView($fullPath, $filename, $extension, $viewMode = 'd
             <link rel="stylesheet" href="<?php echo $this->webPath; ?>/.indexer_files/local_api/style/base-1.2.0.min.css">
             <?php if ($showMarkdown): ?>
             <link rel="stylesheet" href="<?php echo $this->webPath; ?>/.indexer_files/local_api/style/viewer-markdown-1.2.0.min.css">
-            <?php elseif ($showCode): ?>
-            <link rel="stylesheet" href="<?php echo $this->webPath; ?>/.indexer_files/local_api/style/viewer-code-1.2.0.min.css">
-            <link rel="stylesheet" href="<?php echo $this->webPath; ?>/.indexer_files/local_api/style/atom-one-dark.min.css">
             <?php else: ?>
-            <link rel="stylesheet" href="<?php echo $this->webPath; ?>/.indexer_files/local_api/style/viewer-code-1.2.0.min.css">
+            <link rel="stylesheet" href="<?php echo $this->webPath; ?>/.indexer_files/local_api/style/viewer-code-1.2.1.min.css">
             <link rel="stylesheet" href="<?php echo $this->webPath; ?>/.indexer_files/local_api/style/atom-one-dark.min.css">
             <?php endif; ?>
         </head>
@@ -455,7 +452,7 @@ private function handleFileView($fullPath, $filename, $extension, $viewMode = 'd
                         <?php echo Markdown::parse($fileContent); ?>
                     </div>
                 <?php else: ?>
-                    <pre><?php echo htmlspecialchars($fileContent); ?></pre>
+                    <?php echo CodeHighlight::render($fileContent, $extension, $filename); ?>
                 <?php endif; ?>
             <?php elseif ($showCode): ?>
                 <?php echo CodeHighlight::render($fileContent, $extension, $filename); ?>
