@@ -1,8 +1,3 @@
-Here are the updated documents:
-
-## GitHub README.md
-
-```markdown
 # 5q12's Indexer
 
 PHP file browser with sorting, filtering, download, icons, caching, and configurable indexing.
