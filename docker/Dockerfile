@@ -4,8 +4,8 @@ FROM php:8.3-fpm-alpine3.22
 # Set maintainer and version
 LABEL maintainer="5q12"
 LABEL description="5q12's Indexer - Secure file browser with s6-overlay (No Supervisor)"
-LABEL version="1.1.19"
-LABEL alpine.version="3.22.1"
+LABEL version="1.2.0-r2"
+LABEL alpine.version="3.22.2"
 LABEL process.manager="s6-overlay-v3"
 LABEL security.status="hardened"
 

@@ -8,7 +8,7 @@ set -e
 # Configuration
 DOCKER_USERNAME="5q12"
 IMAGE_NAME="5q12-indexer"
-VERSION="1.1.19"
+VERSION="1.2.0-r2"
 DOCKERFILE_PATH="."
 
 # Allow version override via environment variable or command line argument
@@ -246,7 +246,7 @@ if [ $? -eq 0 ]; then
 version: '3.8'
 services:
   indexer:
-    image: 5q12/5q12-indexer:1.1.19
+    image: 5q12/5q12-indexer:1.2.0-r2
     container_name: indexer-s6
     ports:
       - "5012:5012"

@@ -741,7 +741,7 @@ echo "App directory: /app (icons, favicon, local_api, php, caches - NO config fi
 echo "Files directory: /files (mounted read-only)"
 echo ".indexer_files: Individual symlinks to both /config and /app contents"
 echo "Nginx port: 5012"
-echo "Version: 1.2.0-r1"
+echo "Version: 1.2.0-r2"
 echo ""
 echo "Volume mounts:"
 echo "  /config - Contains: config.json, config-reference.txt (source of truth)"

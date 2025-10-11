@@ -1072,7 +1072,7 @@ function formatSizeForError($bytes) {
     <link rel="icon" type="image/png" sizes="144x144" href="<?php echo $webPath; ?>/.indexer_files/favicon/144x144.png">
     <link rel="icon" type="image/png" sizes="192x192" href="<?php echo $webPath; ?>/.indexer_files/favicon/192x192.png">
     <link rel="apple-touch-icon" sizes="180x180" href="<?php echo $webPath; ?>/.indexer_files/favicon/180x180.png">
-    <link rel="stylesheet" href="<?php echo $webPath; ?>/.indexer_files/local_api/style/base-1.2.0.min.css">
+    <link rel="stylesheet" href="<?php echo $webPath; ?>/.indexer_files/local_api/style/base-1.2.1.min.css">
     <link rel="stylesheet" href="<?php echo $webPath; ?>/.indexer_files/local_api/style/index-1.2.0.min.css">
 </head>
 <body<?php if ($iconType === 'disabled') echo ' class="icon-disabled"'; ?>>
